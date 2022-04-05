@@ -1,4 +1,5 @@
 /* Copyright (C) 2011 Alexey Kopytov.
+   Copyright (c) 2022, 2022 Hopsworks
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,6 +32,8 @@ typedef struct {
   double              range_max;
   double              range_deduct;
   double              range_mult;
+  double              min;
+  double              max;
   pthread_mutex_t     mutex;
 } sb_percentile_t;
 
@@ -44,5 +47,9 @@ double sb_percentile_calculate(sb_percentile_t *percentile, double percent);
 void sb_percentile_reset(sb_percentile_t *percentile);
 
 void sb_percentile_done(sb_percentile_t *percentile);
+
+double sb_percentile_min(sb_percentile_t *percentile);
+
+double sb_percentile_max(sb_percentile_t *percentile);
 
 #endif

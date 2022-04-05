@@ -1,4 +1,5 @@
 /* Copyright (C) 2011 Alexey Kopytov.
+   Copyright (c) 2022, 2022 Hopsworks
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -53,6 +54,8 @@ int sb_percentile_init(sb_percentile_t *percentile,
                                          percentile->range_deduct);
   percentile->range_min = range_min;
   percentile->range_max = range_max;
+  percentile->min = 1e10;
+  percentile->max = 0.0;
   percentile->size = size;
   percentile->total = 0;
 
@@ -76,6 +79,10 @@ void sb_percentile_update(sb_percentile_t *percentile, double value)
   pthread_mutex_lock(&percentile->mutex);
   percentile->total++;
   percentile->values[n]++;
+  if (value > percentile->max)
+    percentile->max = value;
+  if (value < percentile->min)
+    percentile->min = value;
   pthread_mutex_unlock(&percentile->mutex);
 }
 
@@ -109,10 +116,22 @@ double sb_percentile_calculate(sb_percentile_t *percentile, double percent)
   return exp((i) / percentile->range_mult + percentile->range_deduct);
 }
 
+double sb_percentile_min(sb_percentile_t *percentile)
+{
+  return percentile->min;
+}
+
+double sb_percentile_max(sb_percentile_t *percentile)
+{
+  return percentile->max;
+}
+
 void sb_percentile_reset(sb_percentile_t *percentile)
 {
   pthread_mutex_lock(&percentile->mutex);
   percentile->total = 0;
+  percentile->min = 1e10;
+  percentile->max = 0;
   memset(percentile->values, 0, percentile->size * sizeof(unsigned long long));
   pthread_mutex_unlock(&percentile->mutex);
 }

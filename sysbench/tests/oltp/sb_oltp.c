@@ -1,5 +1,5 @@
 /* Copyright (c) 2004, 2016 Oracle and/or its affiliates. All rights reserved.
-   Copyright (c) 2021, 2021 Logical Clocks and/or its affiliates.
+   Copyright (c) 2021, 2022 Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1735,12 +1735,16 @@ void oltp_print_stats(sb_stat_t type)
 
     log_timestamp(LOG_NOTICE, &sb_globals.exec_timer,
                   "Intermediate results: %d threads, tps: %6f, reads/s: %6f, writes/s: %6f "
-                  "response time: %6fms (%u%%)",
+                  "response time: %6fms (%u%%)"
+                  ", min: %6fms, max: %6fms",
                   sb_globals.num_threads, num_transactions / seconds,
                   num_read_ops / seconds, num_write_ops / seconds,
                   NS2MS(sb_percentile_calculate(&local_percentile,
                   sb_globals.percentile_rank)),
-                  sb_globals.percentile_rank);
+                  sb_globals.percentile_rank,
+                  NS2MS(sb_percentile_min(&local_percentile)),
+                  NS2MS(sb_percentile_max(&local_percentile))
+                  );
 
     sb_percentile_reset(&local_percentile);
 
