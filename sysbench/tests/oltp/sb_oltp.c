@@ -232,7 +232,7 @@ static int oltp_execute_request(sb_request_t *, int);
 static void oltp_print_stats(sb_stat_t type);
 static db_conn_t *oltp_connect(void);
 static int oltp_disconnect(db_conn_t *);
-static int oltp_reconnect(int thread_id);
+static int oltp_reconnect(int thread_id, int ignore);
 static int oltp_done(void);
 
 static sb_test_t oltp_test =
@@ -1543,6 +1543,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
   unsigned int        local_other_ops=0;
   unsigned int        local_deadlocks=0;
   int                 retry;
+  int                 shutdown;
   log_msg_t           msg;
   log_msg_oper_t      op_msg;
   unsigned long long  nrows;
@@ -1557,8 +1558,18 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
   do  /* deadlock handling */
   {
     retry = 0;
+    shutdown = 0;
     SB_LIST_FOR_EACH(pos, sql_req->queries)
     {
+      if (shutdown == 1)
+      {
+        shutdown = 0;
+        if (oltp_reconnect(thread_id, 1))
+        {
+          log_text(LOG_FATAL, "reconnect failure %d!", thread_id);
+          return 1;
+        }
+      }
       query = SB_LIST_ENTRY(pos, sb_sql_query_t, listitem);
 
       for(i = 0; i < query->num_times; i++)
@@ -1569,7 +1580,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
 
         if (query->type == SB_SQL_QUERY_RECONNECT)
         {
-          if (oltp_reconnect(thread_id))
+          if (oltp_reconnect(thread_id, 0))
           {
             log_text(LOG_FATAL, "reconnect failure %d!", thread_id);
             return 1;
@@ -1597,19 +1608,27 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
         if (rs == NULL)
         {
           rc = db_errno(connections[thread_id]);
-          if (rc != SB_DB_ERROR_DEADLOCK)
-          {
-            log_text(LOG_FATAL, "database error, exiting...");
-            /* exiting, forget about allocated memory */
-            sb_globals.error = 1;
-            return 1; 
-          }  
-          else
+          if (rc == SB_DB_ERROR_DEADLOCK)
           {
             local_deadlocks++;
             retry = 1;
             /* exit for loop */
             break;  
+          }
+          else if (rc == SB_DB_ERROR_SHUTDOWN)
+          {
+            shutdown = 1;
+            local_deadlocks++;
+            retry = 1;
+            /* exit for loop */
+            break;  
+          }
+          else
+          {
+            log_text(LOG_FATAL, "database error, exiting...");
+            /* exiting, forget about allocated memory */
+            sb_globals.error = 1;
+            return 1; 
           }
         }
         
@@ -1835,9 +1854,10 @@ int oltp_disconnect(db_conn_t *con)
 }
 
 
-int oltp_reconnect(int thread_id)
+int oltp_reconnect(int thread_id, int ignore)
 {
   unsigned int table_id;
+  int i = 0;
   char buf[TABLE_NAME_SIZE];
 
   for (table_id = 0; table_id < args.num_tables; table_id++)
@@ -1845,23 +1865,41 @@ int oltp_reconnect(int thread_id)
     close_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
                    get_table_name(table_id, buf));
   }
-  if (oltp_disconnect(connections[thread_id]))
+  if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
     return 1;
-  if (!(connections[thread_id] = oltp_connect()))
-    return 1;
-  for (table_id = 0; table_id < args.num_tables; table_id++)
+  for (i = 0; i < 400; i++)
   {
-    if (prepare_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
-                         bind_bufs + thread_id,
-                         connections[thread_id],
-                         get_table_name(table_id, buf)))
+    if (!(connections[thread_id] = oltp_connect()))
     {
-      log_text(LOG_FATAL, "thread#%d: failed to prepare statements for test",
-               thread_id);
-      return 1;
+      if (ignore == 0)
+        return 1;
+      if (i < 10)
+      {
+        usleep(1000); //Sleep 1 ms before retrying again
+      }
+      else
+      {
+        usleep(100000); //Sleep 100 ms before retrying again
+      }
+      continue;
+    }
+    if (i > 0)
+    {
+      log_text(LOG_NOTICE, "oltp_reconnect used %d loops to reconnect", i);
+    }
+    for (table_id = 0; table_id < args.num_tables; table_id++)
+    {
+      if (prepare_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
+                           bind_bufs + thread_id,
+                           connections[thread_id],
+                           get_table_name(table_id, buf)))
+      {
+        log_text(LOG_FATAL, "thread#%d: failed to prepare statements for test",
+                 thread_id);
+        return 1;
+      }
     }
   }
-  
   return 0;
 }
 
