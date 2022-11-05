@@ -23,17 +23,7 @@ bin_PROGRAMS = sysbench
 EXTRA_LDFLAGS = @EXTRA_LDFLAGS@
 
 # The following check will be extended as new database drivers will be added
-if USE_MYSQL
 mysql_ldadd = drivers/mysql/libsbmysql.a $(MYSQL_LIBS)
-endif
-
-if USE_ORACLE
-ora_ldadd = drivers/oracle/libsboracle.a $(ORA_LIBS)
-endif
-
-if USE_PGSQL
-pgsql_ldadd = drivers/pgsql/libsbpgsql.a $(PGSQL_LIBS)
-endif
 
 sysbench_SOURCES = sysbench.c sysbench.h sb_timer.c sb_timer.h \
 sb_options.c sb_options.h sb_logger.c sb_logger.h sb_list.h db_driver.h \
@@ -42,4 +32,4 @@ db_driver.c sb_percentile.c sb_percentile.h
 sysbench_LDADD = tests/fileio/libsbfileio.a tests/threads/libsbthreads.a \
     tests/memory/libsbmemory.a tests/cpu/libsbcpu.a tests/oltp/libsboltp.a \
     tests/mutex/libsbmutex.a $(mysql_ldadd) $(pgsql_ldadd) $(ora_ldadd)
-sysbench_LDFLAGS = $(EXTRA_LDFLAGS) $(mysql_ldflags) $(pgsql_ldflags) $(ora_ldflags)
+sysbench_LDFLAGS = $(EXTRA_LDFLAGS) $(mysql_ldflags)

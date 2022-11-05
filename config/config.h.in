@@ -160,12 +160,8 @@
 /* Define if /proc/meminfo shows the huge page size (Linux only) */
 #undef HUGETLB_USE_PROC_MEMINFO
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
-
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#undef NO_MINUS_C_MINUS_O
 
 /* Define to the appropriate value for O_SYNC on your platform */
 #undef O_SYNC
@@ -209,12 +205,6 @@
 
 /* Define to 1 if you want to compile with MySQL support */
 #undef USE_MYSQL
-
-/* Define to 1 if you want to compile with Oracle support */
-#undef USE_ORACLE
-
-/* Define to 1 if you want to compile with PostgreSQL support */
-#undef USE_PGSQL
 
 /* Version number of package */
 #undef VERSION

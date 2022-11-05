@@ -65,7 +65,12 @@ esac
 # First check for gcc and g++
 if test "$GCC" = "yes"
 then
-  CFLAGS="-ggdb3 ${CFLAGS} -m64"
+  if test "$target_cpu" != "aarch64"
+  then
+    CFLAGS="-ggdb3 ${CFLAGS} -m64"
+  else
+    CFLAGS="-ggdb3 ${CFLAGS}"
+  fi
   DEBUG_CFLAGS="-O0"
   OPTIMIZE_CFLAGS="-O2"
 fi
@@ -98,20 +103,6 @@ AC_ARG_WITH([mysql],
             [ac_cv_use_mysql=$withval], [ac_cv_use_mysql=yes]
 )
 AC_CACHE_CHECK([whether to compile with MySQL support], [ac_cv_use_mysql], [ac_cv_use_mysql=no])
-
-# Check if we should compile with Oracle support
-AC_ARG_WITH([oracle],
-            AS_HELP_STRING([--with-oracle],[compile with Oracle support (default is disabled)]),
-            [ac_cv_use_oracle=$withval], [ac_cv_use_oracle=no]
-)
-AC_CACHE_CHECK([whether to compile with Oracle support], [ac_cv_use_oracle], [ac_cv_use_oracle=yes])
-
-# Check if we should compile with PostgreSQL support
-AC_ARG_WITH([pgsql],
-            AS_HELP_STRING([--with-pgsql],[compile with PostgreSQL support (default is disabled)]),
-            [ac_cv_use_pgsql=$withval], [ac_cv_use_pgsql=no]
-)
-AC_CACHE_CHECK([whether to compile with PostgreSQL support], [ac_cv_use_pgsql], [ac_cv_use_pgsql=yes])
 
 # Check if we should enable large files support
 AC_ARG_ENABLE(largefile,
@@ -162,23 +153,6 @@ if test x$ac_cv_use_mysql != xno; then
     AC_SUBST([MYSQL_CFLAGS])
 fi
 AM_CONDITIONAL(USE_MYSQL, test x$ac_cv_use_mysql != xno)
-
-AM_CONDITIONAL(USE_ORACLE, test x$ac_cv_use_oracle != xno)
-if test x$ac_cv_use_oracle != xno; then
-    AC_DEFINE(USE_ORACLE,1,[Define to 1 if you want to compile with Oracle support])
-    ORA_LIBS="-L${ac_cv_use_oracle}/lib -lclntsh"
-    ORA_CFLAGS="-I${ac_cv_use_oracle}/rdbms/demo -I${ac_cv_use_oracle}/rdbms/public"
-    AC_SUBST([ORA_LIBS])
-    AC_SUBST([ORA_CFLAGS])
-fi
-
-if test x$ac_cv_use_pgsql != xno; then
-    AC_CHECK_PGSQL([$ac_cv_use_pgsql])
-    AC_DEFINE(USE_PGSQL,1,[Define to 1 if you want to compile with PostgreSQL support])
-    AC_SUBST([PGSQL_LIBS])
-    AC_SUBST([PGSQL_CFLAGS])
-fi
-AM_CONDITIONAL(USE_PGSQL, test x$ac_cv_use_pgsql != xno)
 
 # Check for libaio
 AC_CHECK_AIO
@@ -380,8 +354,6 @@ Makefile
 sysbench/Makefile
 sysbench/drivers/Makefile
 sysbench/drivers/mysql/Makefile
-sysbench/drivers/oracle/Makefile
-sysbench/drivers/pgsql/Makefile
 sysbench/tests/Makefile
 sysbench/tests/cpu/Makefile
 sysbench/tests/fileio/Makefile

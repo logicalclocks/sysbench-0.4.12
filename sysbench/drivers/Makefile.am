@@ -14,16 +14,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-if USE_MYSQL
 MYSQL_DIR = mysql
-endif
 
-if USE_ORACLE
-ORACLE_DIR = oracle
-endif
-
-if USE_PGSQL
-PGSQL_DIR = pgsql
-endif
-
-SUBDIRS = $(MYSQL_DIR) $(ORACLE_DIR) $(PGSQL_DIR)
+SUBDIRS = $(MYSQL_DIR)
