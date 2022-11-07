@@ -66,7 +66,8 @@ typedef enum
 {
   SB_DB_ERROR_NONE,
   SB_DB_ERROR_DEADLOCK,
-  SB_DB_ERROR_FAILED
+  SB_DB_ERROR_FAILED,
+  SB_DB_ERROR_SHUTDOWN
 } db_error_t;
 
 
