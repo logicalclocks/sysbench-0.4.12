@@ -499,7 +499,34 @@ int oltp_cmd_prepare(void)
   return 0;
 }
  
-void *oltp_cmd_prepare_one_table(void *arg)
+int handle_query(db_conn *con, const char *query, const char *err_message)
+{
+  while (db_query(con, query) == NULL)
+  {
+    log_text(LOG_FATAL, err_message);
+    if (con->db_errno == SB_DB_ERROR_DEADLOCK)
+    {
+      sleep(1);
+      con->db_errno = SB_DB_ERROR_NONE;
+      continue;
+    }
+    return -1;
+  }
+  return 0;
+}
+
+db_stmt_t* handle_prepare(db_conn *con, const char *query)
+{
+  db_stmt_t *res;
+  if ((res = db_prepare(con, query)) == NULL)
+  {
+    log_text(LOG_FATAL, "Failed to prepare query");
+    return NULL;
+  }
+  return res;
+}
+
+void *oltp_cmd_prepare_one_table(void *arg
 {
   unsigned table_id = *(unsigned int*)arg;
   db_conn_t      *con;
@@ -605,21 +632,20 @@ void *oltp_cmd_prepare_one_table(void *arg)
            (args.table_comment_str) ?  args.table_comment_str : "",
            (args.table_comment_str) ?  "'" : ""
            );
-//printf(stderr, "Query:\n%s\n", query);
-  if (db_query(con, query) == NULL)
+  if (handle_query(con, query, 
+      "Failed to create test table") != 0)
   {
-    log_text(LOG_FATAL, "failed to create test table\nQuery:\n%s\n", query);
     goto error;
-  }  
+  }
 
   if (args.auto_inc && !driver_caps.serial && !driver_caps.auto_increment)
   {
     snprintf(query, query_len,
              "CREATE SEQUENCE %s_seq",
              table_name);
-    if (db_query(con, query) == NULL)
+    if (handle_query(con, query,
+        "Failed to create sequence on test table") != 0)
     {
-      log_text(LOG_FATAL, "failed to create sequence on test table");
       goto error;
     }
     snprintf(query, query_len,
@@ -627,9 +653,9 @@ void *oltp_cmd_prepare_one_table(void *arg)
              "FOR EACH ROW "
              "BEGIN SELECT %s_seq.nextval INTO :new.id FROM DUAL; "
              "END;", table_name, table_name, table_name);
-    if (db_query(con, query) == NULL)
+    if (handle_query(con, query,
+        "Failed to create trigger on test table") != 0)
     {
-      log_text(LOG_FATAL, "failed to create trigger on test table");
       goto error;
     }
   }
@@ -638,9 +664,9 @@ void *oltp_cmd_prepare_one_table(void *arg)
   snprintf(query, query_len,
            "CREATE INDEX k on %s(k)",
            table_name);
-  if (db_query(con, query) == NULL)
+  if (handle_query(con, query,
+      "Failed to create secondary index on table") != 0)
   {
-    log_text(LOG_FATAL, "failed to create secondary index on table!");
     goto error;
   }
   /* Fill test table with data */
@@ -711,9 +737,9 @@ void *oltp_cmd_prepare_one_table(void *arg)
     }
     
     /* Execute query */
-    if (db_query(con, query) == NULL)
+    if (handle_query(con, query,
+        "Failed to create test table") != 0)
     {
-      log_text(LOG_FATAL, "failed to create test table!");
       goto error;
     }
 
@@ -722,9 +748,9 @@ void *oltp_cmd_prepare_one_table(void *arg)
       commit_cntr += nrows;
       if (commit_cntr >= ROWS_BEFORE_COMMIT)
       {
-        if (db_query(con, "COMMIT") == NULL)
+        if (handle_query(con, "COMMIT",
+            "Failed to commit inserted rows") != 0)
         {
-          log_text(LOG_FATAL, "failed to commit inserted rows!");
           goto error;
         }
         commit_cntr -= ROWS_BEFORE_COMMIT;
@@ -734,11 +760,11 @@ void *oltp_cmd_prepare_one_table(void *arg)
 
   if (args.table_size > 0)
   {
-    if (driver_caps.needs_commit && db_query(con, "COMMIT") == NULL)
+    if (driver_caps.needs_commit)
     {
-      if (db_query(con, "COMMIT") == NULL)
+      if (handle_query(con, "COMMIT",
+          "Failed to commit inserted rows") != 0)
       {
-        log_text(LOG_FATAL, "failed to commit inserted rows!");
         goto error;
       }
     }
@@ -788,7 +814,7 @@ int oltp_cmd_cleanup(void)
     table_name = get_table_name(table_id, buf);
     log_text(LOG_NOTICE, "Dropping table '%s'...", table_name);
     snprintf(query, sizeof(query), "DROP TABLE %s", table_name);
-    if (db_query(con, query) == NULL)
+    if (handle_query(con, query, "Failed to drop table") != 0)
     {
       oltp_disconnect(con);
       return 1;
@@ -830,7 +856,7 @@ int oltp_init(void)
     {
       table_name = get_table_name(table_id, buf);
       snprintf(query, sizeof(query), "TRUNCATE TABLE %s", table_name);
-      if (db_query(con, query) == NULL)
+      if (handle_query(con, query, "Failed to TRUNCATE table") != 0)
         return 1;
     }
     oltp_disconnect(con);
@@ -2092,9 +2118,9 @@ void close_stmt_set(oltp_stmt_set_t *set, char *table_name)
   {
     char      query[MAX_QUERY_LEN];
     snprintf(query, MAX_QUERY_LEN, "HANDLER %s CLOSE", table_name);
-    if (db_query(set->point->connection, query) == NULL)
+    if (handle_query(set->point->connection, query,
+        "Failed to close handler") != 0)
     {
-      log_text(LOG_FATAL, "failed to close handler");
     }
   }
   db_close(set->point);
@@ -2150,7 +2176,7 @@ int prepare_stmt_set_sp(oltp_stmt_set_t *set,
  
   /* Prepare CALL statement */
   snprintf(query, MAX_QUERY_LEN, "CALL %s(?,?)", args.sp_name);
-  set->call = db_prepare(conn, query);
+  set->call = handle_prepare(conn, query);
   if (set->call == NULL)
     return 1;
   params[0].type = DB_TYPE_INT;
@@ -2182,9 +2208,9 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   if  (args.point_select_mysql_handler)
   {
     snprintf(query, MAX_QUERY_LEN, "HANDLER %s OPEN", table_name);
-    if (db_query(conn, query) == NULL)
+    if (handle_query(conn, query,
+        "Failed to open handler") != 0)
     {
-      log_text(LOG_FATAL, "failed to open handler");
       return 1;
     }
 
@@ -2205,7 +2231,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
                table_name);
     }
   }
-  set->point = db_prepare(conn, query);
+  set->point = handle_prepare(conn, query);
   if (set->point == NULL)
   {
     return 1;
@@ -2229,7 +2255,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   }
   snprintf(&query[len_str], MAX_QUERY_LEN - len_str, ")");
   query[len_str+1] = (char)0;
-  set->in_point = db_prepare(conn, query);
+  set->in_point = handle_prepare(conn, query);
   if (set->in_point == NULL)
     return 1;
   if (args.use_in_statement)
@@ -2255,7 +2281,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     snprintf(query, MAX_QUERY_LEN, "SELECT c from %s where id between ? and ?",
              table_name);
   }
-  set->range = db_prepare(conn, query);
+  set->range = handle_prepare(conn, query);
   if (set->range == NULL)
     return 1;
   int len = 2;
@@ -2289,7 +2315,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     snprintf(query, MAX_QUERY_LEN,
              "SELECT SUM(K) from %s where id between ? and ?", table_name);
   }
-  set->range_sum = db_prepare(conn, query);
+  set->range_sum = handle_prepare(conn, query);
   if (set->range_sum == NULL)
     return 1;
   len = 2;
@@ -2325,7 +2351,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
              "SELECT c from %s where id between ? and ? order by c",
              table_name);
   }
-  set->range_order = db_prepare(conn, query);
+  set->range_order = handle_prepare(conn, query);
   if (set->range_order == NULL)
     return 1;
   len = 2;
@@ -2361,7 +2387,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
              "SELECT DISTINCT c from %s where id between ? and ? order by c",
              table_name);
   }
-  set->range_distinct = db_prepare(conn, query);
+  set->range_distinct = handle_prepare(conn, query);
   if (set->range_distinct == NULL)
     return 1;
   len = 2;
@@ -2387,7 +2413,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   /* Prepare the update_index statement */
   snprintf(query, MAX_QUERY_LEN, "UPDATE %s set k=k+1 where id=?",
            table_name);
-  set->update_index = db_prepare(conn, query);
+  set->update_index = handle_prepare(conn, query);
   if (set->update_index == NULL)
     return 1;
   binds[0].type = DB_TYPE_INT;
@@ -2401,7 +2427,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   snprintf(query, MAX_QUERY_LEN,
            "UPDATE %s set c=? where id=?",
            table_name);
-  set->update_non_index = db_prepare(conn, query);
+  set->update_non_index = handle_prepare(conn, query);
   if (set->update_non_index == NULL)
     return 1;
   /*
@@ -2412,7 +2438,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   /* Prepare the delete statement */
   snprintf(query, MAX_QUERY_LEN, "DELETE from %s where id=?",
            table_name);
-  set->delete = db_prepare(conn, query);
+  set->delete = handle_prepare(conn, query);
   if (set->delete == NULL)
     return 1;
   binds[0].type = DB_TYPE_INT;
@@ -2435,7 +2461,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
              "'aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy')",
              table_name);
   }
-  set->insert = db_prepare(conn, query);
+  set->insert = handle_prepare(conn, query);
   if (set->insert == NULL)
     return 1;
   len = 1;
@@ -2467,7 +2493,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     else
       snprintf(query, MAX_QUERY_LEN, "LOCK TABLES %s WRITE", table_name);
   }
-  set->lock = db_prepare(conn, query);
+  set->lock = handle_prepare(conn, query);
   if (set->lock == NULL)
     return 1;
 
@@ -2476,7 +2502,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     strncpy(query, "COMMIT", MAX_QUERY_LEN);
   else
     strncpy(query, "UNLOCK TABLES", MAX_QUERY_LEN);
-  set->unlock = db_prepare(conn, query);
+  set->unlock = handle_prepare(conn, query);
   if (set->unlock == NULL)
     return 1;
 
@@ -2498,7 +2524,7 @@ int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
   /* Prepare the point statement */
   snprintf(query, MAX_QUERY_LEN, "SELECT pad from %s where id=?",
            table_name);
-  set->point = db_prepare(conn, query);
+  set->point = handle_prepare(conn, query);
   if (set->point == NULL)
     return 1;
   binds[0].type = DB_TYPE_INT;
@@ -2511,7 +2537,7 @@ int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
   /* Prepare the update_index statement */
   snprintf(query, MAX_QUERY_LEN, "UPDATE %s set k=k+1 where id=?",
            table_name);
-  set->update_index = db_prepare(conn, query);
+  set->update_index = handle_prepare(conn, query);
   if (set->update_index == NULL)
     return 1;
   binds[0].type = DB_TYPE_INT;
@@ -2525,7 +2551,7 @@ int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
   snprintf(query, MAX_QUERY_LEN,
            "UPDATE %s set c=? where id=?",
            table_name);
-  set->update_non_index = db_prepare(conn, query);
+  set->update_non_index = handle_prepare(conn, query);
   if (set->update_non_index == NULL)
     return 1;
   /*
@@ -2536,7 +2562,7 @@ int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
   /* Prepare the delete statement */
   snprintf(query, MAX_QUERY_LEN, "DELETE from %s where id=?",
            table_name);
-  set->delete = db_prepare(conn, query);
+  set->delete = handle_prepare(conn, query);
   if (set->delete == NULL)
     return 1;
   binds[0].type = DB_TYPE_INT;
@@ -2549,7 +2575,7 @@ int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
   /* Prepare the insert statement */
   snprintf(query, MAX_QUERY_LEN, "INSERT INTO %s values(?,?,?,?)",
            table_name);
-  set->insert = db_prepare(conn, query);
+  set->insert = handle_prepare(conn, query);
   /*
     Insert statement is re-bound each time because of the string
     parameters

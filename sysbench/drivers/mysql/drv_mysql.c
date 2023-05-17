@@ -664,6 +664,12 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
       log_text(LOG_ALERT, "failed to execute mysql_stmt_execute(): Err%d %s",
                mysql_errno(con->ptr),
                mysql_error(con->ptr));
+      if (rc == 2013 ||
+          rc == ER_SERVER_SHUTDOWN ||
+          rc == ER_SHUTDOWN_COMPLETE ||
+          rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+          rc == ER_NORMAL_SERVER_SHUTDOWN)
+        return SB_DB_ERROR_SHUTDOWN;
       return SB_DB_ERROR_FAILED;
     }
     return SB_DB_ERROR_NONE;
@@ -740,6 +746,12 @@ int mysql_drv_query(db_conn_t *sb_conn, const char *query,
       return SB_DB_ERROR_DEADLOCK;
     log_text(LOG_ALERT, "failed to execute MySQL query: `%s`:", query);
     log_text(LOG_ALERT, "Error %d %s", mysql_errno(con), mysql_error(con));
+    if (rc == 2013 ||
+        rc == ER_SERVER_SHUTDOWN ||
+        rc == ER_SHUTDOWN_COMPLETE ||
+        rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+        rc == ER_NORMAL_SERVER_SHUTDOWN)
+      return SB_DB_ERROR_SHUTDOWN;
     return SB_DB_ERROR_FAILED; 
   }  
 
