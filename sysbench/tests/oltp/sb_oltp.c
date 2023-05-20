@@ -306,7 +306,6 @@ static int parse_arguments(void);
 static unsigned int rnd_func_uniform(void);
 static unsigned int rnd_func_gaussian(void);
 static unsigned int rnd_func_special(void);
-static unsigned int get_unique_random_id(void);
 static unsigned int get_unique_id(void);
 
 /* SQL request generators */
@@ -499,7 +498,7 @@ int oltp_cmd_prepare(void)
   return 0;
 }
  
-int handle_query(db_conn *con, const char *query, const char *err_message)
+int handle_query(db_conn_t *con, const char *query, const char *err_message)
 {
   unsigned int retry_count = 0;
   while (db_query(con, query) == NULL)
@@ -521,7 +520,7 @@ int handle_query(db_conn *con, const char *query, const char *err_message)
   return 0;
 }
 
-db_stmt_t* handle_prepare(db_conn *con, const char *query)
+db_stmt_t* handle_prepare(db_conn_t *con, const char *query)
 {
   db_stmt_t *res;
   if ((res = db_prepare(con, query)) == NULL)
@@ -555,7 +554,7 @@ void *oltp_cmd_prepare_one_table(void *arg)
 
   table_name = get_table_name(table_id, buf);
 
-  while (true)
+  while (1)
   {
     if (retry > 0)
     {
@@ -574,8 +573,10 @@ void *oltp_cmd_prepare_one_table(void *arg)
         log_text(LOG_FATAL, "Tried 100 times, failing now: %s", table_name);
         goto error;
       }
-      log_text(LOG_NOTICE, "Dropping table '%s' before retry", table_name);
-      snprintf(query, sizeof(query), "DROP TABLE %s", table_name);
+      log_text(LOG_NOTICE, "Dropping table '%s' before retry: %u",
+               table_name,
+               retry);
+      snprintf(query, MAX_QUERY_LEN, "DROP TABLE %s", table_name);
       handle_query(con, query, "Ignore any errors");
       retry = 0;
     }
@@ -896,6 +897,7 @@ int oltp_cmd_cleanup(void)
     }
     retry = 0;
   }
+  return 1;
 }
 
 int oltp_init(void)
@@ -1746,6 +1748,15 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
             db_free_results(rs);
             local_deadlocks++;
             retry = 1;
+            break;  
+          }
+          else if (rc == SB_DB_ERROR_SHUTDOWN)
+          {
+            db_free_results(rs);
+            shutdown = 1;
+            local_deadlocks++;
+            retry = 1;
+            /* exit for loop */
             break;  
           }
           else if (rc != SB_DB_ERROR_NONE)
@@ -3019,6 +3030,7 @@ unsigned int get_unique_id(void)
   return res;
 }
 
+/*
 unsigned int get_unique_random_id(void)
 {
   unsigned int res;
@@ -3030,6 +3042,7 @@ unsigned int get_unique_random_id(void)
 
   return res;
 }
+*/
 
 int get_think_time(void)
 {
