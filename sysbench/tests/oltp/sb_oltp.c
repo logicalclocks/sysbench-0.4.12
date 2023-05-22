@@ -501,12 +501,18 @@ int oltp_cmd_prepare(void)
  
 int handle_query(db_conn *con, const char *query, const char *err_message)
 {
+  unsigned int retry_count = 0;
   while (db_query(con, query) == NULL)
   {
     log_text(LOG_FATAL, err_message);
     if (con->db_errno == SB_DB_ERROR_DEADLOCK)
     {
       sleep(1);
+      retry_count++;
+      if (retry_count > 100)
+      {
+        return -1;
+      }
       con->db_errno = SB_DB_ERROR_NONE;
       continue;
     }
@@ -526,7 +532,7 @@ db_stmt_t* handle_prepare(db_conn *con, const char *query)
   return res;
 }
 
-void *oltp_cmd_prepare_one_table(void *arg
+void *oltp_cmd_prepare_one_table(void *arg)
 {
   unsigned table_id = *(unsigned int*)arg;
   db_conn_t      *con;
@@ -544,64 +550,86 @@ void *oltp_cmd_prepare_one_table(void *arg
   char           buf[TABLE_NAME_SIZE];
   char           *partition_str;
   unsigned int   partition_str_size= 0;
+  unsigned int   retry = 0;
+  unsigned int   retry_count = 0;
 
   table_name = get_table_name(table_id, buf);
 
-  /* Create database connection */
-  con = oltp_connect();
-  if (con == NULL)
-    goto early_error;
+  while (true)
+  {
+    if (retry > 0)
+    {
+      oltp_disconnect(con);
+    }
+    /* Create database connection */
+    con = oltp_connect();
+    if (con == NULL)
+      goto early_error;
 
-  /* Determine if database supports multiple row inserts */
-  if (driver_caps.multi_rows_insert)
-    nrows = INSERT_ROWS;
-  else
-    nrows = 1;
+    if (retry > 0)
+    {
+      retry_count++;
+      if (retry_count >= 100)
+      {
+        log_text(LOG_FATAL, "Tried 100 times, failing now: %s", table_name);
+        goto error;
+      }
+      log_text(LOG_NOTICE, "Dropping table '%s' before retry", table_name);
+      snprintf(query, sizeof(query), "DROP TABLE %s", table_name);
+      handle_query(con, query, "Ignore any errors");
+      retry = 0;
+    }
+
+    /* Determine if database supports multiple row inserts */
+    if (driver_caps.multi_rows_insert)
+      nrows = INSERT_ROWS;
+    else
+      nrows = 1;
   
-  /* Prepare statement buffer */
-  if (args.auto_inc)
-  {
-    snprintf(insert_str, sizeof(insert_str),
-             "(0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')");
-  }
-  else if (args.use_filter)
-  {
-    snprintf(insert_str, sizeof(insert_str),
-             "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt,%d')",
-             args.table_size,
-             args.table_size);
-  }
-  else
-  {
-    snprintf(insert_str, sizeof(insert_str),
-             "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')",
-             args.table_size);
-  }
+    /* Prepare statement buffer */
+    if (args.auto_inc)
+    {
+      snprintf(insert_str, sizeof(insert_str),
+               "(0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')");
+    }
+    else if (args.use_filter)
+    {
+      snprintf(insert_str, sizeof(insert_str),
+        "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt,%d')",
+        args.table_size,
+        args.table_size);
+    }
+    else
+    {
+      snprintf(insert_str, sizeof(insert_str),
+        "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')",
+        args.table_size);
+    }
   
-  query_len = 9 * MAX_QUERY_LEN + nrows * (strlen(insert_str) + 1);
-  if (args.num_partitions > MAX_PARTITIONS)
-  {
-    log_text(LOG_NOTICE, "Max %d partitions supported, doing %d",
-             MAX_PARTITIONS, MAX_PARTITIONS);
-    args.num_partitions= MAX_PARTITIONS;
-  }
-  if (args.num_partitions)
-  {
-    partition_str_size= 50 * (args.num_partitions + 1);
-    query_len+= partition_str_size;
-  }
-  partition_str = (char *)malloc(partition_str_size);
-  query = (char *)malloc(query_len);
-  if (query == NULL || partition_str == NULL)
-  {
-    log_text(LOG_FATAL, "memory allocation failure!");
-    goto error;
-  }
+    query_len = 9 * MAX_QUERY_LEN + nrows * (strlen(insert_str) + 1);
+    if (args.num_partitions > MAX_PARTITIONS)
+    {
+      log_text(LOG_NOTICE, "Max %d partitions supported, doing %d",
+               MAX_PARTITIONS, MAX_PARTITIONS);
+      args.num_partitions= MAX_PARTITIONS;
+    }
+    if (args.num_partitions)
+    {
+      partition_str_size= 50 * (args.num_partitions + 1);
+      query_len+= partition_str_size;
+    }
+    partition_str = (char *)malloc(partition_str_size);
+    query = (char *)malloc(query_len);
+    if (query == NULL || partition_str == NULL)
+    {
+      log_text(LOG_FATAL, "memory allocation failure!");
+      goto error;
+    }
   
-  /* Create test table */
-  log_text(LOG_NOTICE, "Creating table '%s'...", table_name);
-  table_options_str = driver_caps.table_options_str;
-  snprintf(query, query_len,
+    /* Create test table */
+    log_text(LOG_NOTICE, "Creating table '%s'...", table_name);
+    table_options_str = driver_caps.table_options_str;
+    snprintf(query, query_len,
            "CREATE TABLE %s ("
            "id %s %s NOT NULL %s primary key, "
            "k integer %s DEFAULT '0' NOT NULL, "
@@ -632,146 +660,180 @@ void *oltp_cmd_prepare_one_table(void *arg
            (args.table_comment_str) ?  args.table_comment_str : "",
            (args.table_comment_str) ?  "'" : ""
            );
-  if (handle_query(con, query, 
-      "Failed to create test table") != 0)
-  {
-    goto error;
-  }
-
-  if (args.auto_inc && !driver_caps.serial && !driver_caps.auto_increment)
-  {
-    snprintf(query, query_len,
-             "CREATE SEQUENCE %s_seq",
-             table_name);
-    if (handle_query(con, query,
-        "Failed to create sequence on test table") != 0)
-    {
-      goto error;
-    }
-    snprintf(query, query_len,
-             "CREATE TRIGGER %s_trig BEFORE INSERT ON %s "
-             "FOR EACH ROW "
-             "BEGIN SELECT %s_seq.nextval INTO :new.id FROM DUAL; "
-             "END;", table_name, table_name, table_name);
-    if (handle_query(con, query,
-        "Failed to create trigger on test table") != 0)
-    {
-      goto error;
-    }
-  }
-  
-  /* Create secondary index on 'k' */
-  snprintf(query, query_len,
-           "CREATE INDEX k on %s(k)",
-           table_name);
-  if (handle_query(con, query,
-      "Failed to create secondary index on table") != 0)
-  {
-    goto error;
-  }
-  /* Fill test table with data */
-  log_text(LOG_NOTICE, "Creating %d records in table '%s'...", args.table_size,
-           table_name);
-
-  for (i = 0; i < args.table_size; i += nrows)
-  {
-    /* Build query */
-    if (args.auto_inc)
-    {
-      n = snprintf(query, query_len, "INSERT INTO %s(k, c, pad) VALUES ",
-                   table_name);
-    }
-    else if (args.use_filter)
-    {
-      n = snprintf(query, query_len, "INSERT INTO %s(id, k, c, pad, filter_col) VALUES ",
-                   table_name);
-    }
-    else
-    {
-      n = snprintf(query, query_len, "INSERT INTO %s(id, k, c, pad) VALUES ",
-                   table_name);
-    }
-    if (n >= query_len)
-    {
-      log_text(LOG_FATAL, "query is too long!");
-      goto error;
-    }
-    pos = query + n;
-    for (j = 0; j < nrows; j++)
-    {
-      if ((unsigned)(pos - query) >= query_len)
-      {
-        log_text(LOG_FATAL, "query is too long!");
-        goto error;
-      }
-
-      /* Form the values string when if are not using auto_inc */
-      if (!args.auto_inc)
-      {
-        if (!args.use_filter)
-        {
-          snprintf(insert_str, sizeof(insert_str),
-                   "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')",
-                   i + j + 1);
-        }
-        else
-        {
-          snprintf(insert_str, sizeof(insert_str),
-                   "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt',%d)",
-                   i + j + 1, i + j + 1);
-        }
-      }
-      
-      if (j == nrows - 1 || i+j == args.table_size -1)
-        n = snprintf(pos, query_len - (pos - query), "%s", insert_str);
-      else
-        n = snprintf(pos, query_len - (pos - query), "%s,", insert_str);
-      if (n >= query_len - (pos - query))
-      {
-        log_text(LOG_FATAL, "query is too long!");
-        goto error;
-      }
-      if (i+j == args.table_size - 1)
-        break;
-      pos += n;
-    }
-    
-    /* Execute query */
-    if (handle_query(con, query,
+    if (handle_query(con, query, 
         "Failed to create test table") != 0)
     {
+      if (con->db_errno == SB_DB_ERROR_SHUTDOWN)
+      {
+        retry = 1;
+        /* Retriable error */
+        continue;
+      }
       goto error;
     }
 
-    if (driver_caps.needs_commit)
+    if (args.auto_inc && !driver_caps.serial && !driver_caps.auto_increment)
     {
-      commit_cntr += nrows;
-      if (commit_cntr >= ROWS_BEFORE_COMMIT)
+      snprintf(query, query_len,
+               "CREATE SEQUENCE %s_seq",
+               table_name);
+      if (handle_query(con, query,
+          "Failed to create sequence on test table") != 0)
+      {
+        goto error;
+      }
+      snprintf(query, query_len,
+               "CREATE TRIGGER %s_trig BEFORE INSERT ON %s "
+               "FOR EACH ROW "
+               "BEGIN SELECT %s_seq.nextval INTO :new.id FROM DUAL; "
+               "END;", table_name, table_name, table_name);
+      if (handle_query(con, query,
+          "Failed to create trigger on test table") != 0)
+      {
+        goto error;
+      }
+    }
+  
+    /* Create secondary index on 'k' */
+    snprintf(query, query_len,
+             "CREATE INDEX k on %s(k)",
+             table_name);
+    if (handle_query(con, query,
+        "Failed to create secondary index on table") != 0)
+    {
+      if (con->db_errno == SB_DB_ERROR_SHUTDOWN)
+      {
+        retry = 1;
+        /* Retriable error */
+        continue;
+      }
+      goto error;
+    }
+    /* Fill test table with data */
+    log_text(LOG_NOTICE,
+             "Creating %d records in table '%s'...",
+             args.table_size,
+             table_name);
+
+    for (i = 0; i < args.table_size; i += nrows)
+    {
+      /* Build query */
+      if (args.auto_inc)
+      {
+        n = snprintf(query, query_len, "INSERT INTO %s(k, c, pad) VALUES ",
+                     table_name);
+      }
+      else if (args.use_filter)
+      {
+        n = snprintf(query,
+                     query_len,
+                     "INSERT INTO %s(id, k, c, pad, filter_col) VALUES ",
+                     table_name);
+      }
+      else
+      {
+        n = snprintf(query, query_len, "INSERT INTO %s(id, k, c, pad) VALUES ",
+                     table_name);
+      }
+      if (n >= query_len)
+      {
+        log_text(LOG_FATAL, "query is too long!");
+        goto error;
+      }
+      pos = query + n;
+      for (j = 0; j < nrows; j++)
+      {
+        if ((unsigned)(pos - query) >= query_len)
+        {
+          log_text(LOG_FATAL, "query is too long!");
+          goto error;
+        }
+
+        /* Form the values string when if are not using auto_inc */
+        if (!args.auto_inc)
+        {
+          if (!args.use_filter)
+          {
+            snprintf(insert_str, sizeof(insert_str),
+                     "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')",
+                     i + j + 1);
+          }
+          else
+          {
+            snprintf(insert_str, sizeof(insert_str),
+                     "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt',%d)",
+                     i + j + 1, i + j + 1);
+          }
+        }
+
+        if (j == nrows - 1 || i+j == args.table_size -1)
+          n = snprintf(pos, query_len - (pos - query), "%s", insert_str);
+        else
+          n = snprintf(pos, query_len - (pos - query), "%s,", insert_str);
+        if (n >= query_len - (pos - query))
+        {
+          log_text(LOG_FATAL, "query is too long!");
+          goto error;
+        }
+        if (i+j == args.table_size - 1)
+          break;
+        pos += n;
+      }
+    
+      /* Execute query */
+      if (handle_query(con, query,
+          "Failed inserts into test table") != 0)
+      {
+        if (con->db_errno == SB_DB_ERROR_SHUTDOWN)
+        {
+          retry = 1;
+          /* Retriable error */
+          continue;
+        }
+        goto error;
+      }
+
+      if (driver_caps.needs_commit)
+      {
+        commit_cntr += nrows;
+        if (commit_cntr >= ROWS_BEFORE_COMMIT)
+        {
+          if (handle_query(con, "COMMIT",
+              "Failed to commit inserted rows, before final") != 0)
+          {
+            if (con->db_errno == SB_DB_ERROR_SHUTDOWN)
+            {
+              retry = 1;
+              /* Retriable error */
+              continue;
+            }
+            goto error;
+          }
+          commit_cntr -= ROWS_BEFORE_COMMIT;
+        }
+      }
+    }
+
+    if (args.table_size > 0)
+    {
+      if (driver_caps.needs_commit)
       {
         if (handle_query(con, "COMMIT",
             "Failed to commit inserted rows") != 0)
         {
+          if (con->db_errno == SB_DB_ERROR_SHUTDOWN)
+          {
+            retry = 1;
+            /* Retriable error */
+            continue;
+          }
           goto error;
         }
-        commit_cntr -= ROWS_BEFORE_COMMIT;
       }
     }
+    oltp_disconnect(con);
+    break;
   }
-
-  if (args.table_size > 0)
-  {
-    if (driver_caps.needs_commit)
-    {
-      if (handle_query(con, "COMMIT",
-          "Failed to commit inserted rows") != 0)
-      {
-        goto error;
-      }
-    }
-  }
-
-  oltp_disconnect(con);
-
   oltp_reset_stats();
 
   return NULL;
@@ -790,6 +852,8 @@ int oltp_cmd_cleanup(void)
   db_conn_t *con;
   unsigned int table_id;
   char      *table_name;
+  unsigned retry_count = 0;
+  unsigned retry = 0;
   char      buf[TABLE_NAME_SIZE];
   char      query[256];
   
@@ -803,28 +867,35 @@ int oltp_cmd_cleanup(void)
     return 1;
   }
 
-  /* Create database connection */
-  con = oltp_connect();
-  if (con == NULL)
-    return 1;
-
-  /* Drop the test tables */
-  for (table_id = 0; table_id < args.num_tables; table_id++)
+  while (retry_count < 10)
   {
-    table_name = get_table_name(table_id, buf);
-    log_text(LOG_NOTICE, "Dropping table '%s'...", table_name);
-    snprintf(query, sizeof(query), "DROP TABLE %s", table_name);
-    if (handle_query(con, query, "Failed to drop table") != 0)
+    retry_count++;
+    /* Create database connection */
+    con = oltp_connect();
+    if (con == NULL)
+      return 1;
+
+    /* Drop the test tables */
+    for (table_id = 0; table_id < args.num_tables; table_id++)
+    {
+      table_name = get_table_name(table_id, buf);
+      log_text(LOG_NOTICE, "Dropping table '%s'...", table_name);
+      snprintf(query, sizeof(query), "DROP TABLE %s", table_name);
+      if (handle_query(con, query, "Failed to drop table") != 0)
+      {
+        oltp_disconnect(con);
+        retry = 1;
+        break;
+      }
+    }
+    if (retry == 0)
     {
       oltp_disconnect(con);
-      return 1;
+      log_text(LOG_INFO, "Done.");
+      return 0;
     }
+    retry = 0;
   }
-
-  oltp_disconnect(con);
-  log_text(LOG_INFO, "Done.");
-  
-  return 0;
 }
 
 int oltp_init(void)
@@ -1884,50 +1955,62 @@ int oltp_reconnect(int thread_id, int ignore)
 {
   unsigned int table_id;
   int i = 0;
+  unsigned int retry_count = 0;
+  unsigned int retry = 0;
   char buf[TABLE_NAME_SIZE];
 
-  for (table_id = 0; table_id < args.num_tables; table_id++)
+  while (retry_count < 10)
   {
-    close_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
-                   get_table_name(table_id, buf));
-  }
-  if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
-    return 1;
-  usleep(1000); //Sleep 1 ms before retrying again
-  for (i = 0; i < 400; i++)
-  {
-    if (!(connections[thread_id] = oltp_connect()))
-    {
-      if (ignore == 0)
-        return 1;
-      if (i < 10)
-      {
-        usleep(1000); //Sleep 1 ms before retrying again
-      }
-      else
-      {
-        usleep(100000); //Sleep 100 ms before retrying again
-      }
-      continue;
-    }
-    if (i > 0)
-    {
-      log_text(LOG_NOTICE, "oltp_reconnect used %d loops to reconnect", i);
-    }
+    retry_count++;
+    retry = 0;
+    usleep(1000); //Sleep 1 ms before retrying again
     for (table_id = 0; table_id < args.num_tables; table_id++)
     {
-      if (prepare_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
-                           bind_bufs + thread_id,
-                           connections[thread_id],
-                           get_table_name(table_id, buf)))
+      close_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
+                     get_table_name(table_id, buf));
+    }
+    if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
+      return 1;
+    for (i = 0; i < 40; i++)
+    {
+      if (!(connections[thread_id] = oltp_connect()))
       {
-        log_text(LOG_FATAL, "thread#%d: failed to prepare statements for test",
-                 thread_id);
-        return 1;
+        if (ignore == 0)
+          return 1;
+        if (i < 3)
+        {
+          usleep(1000); //Sleep 1 ms before retrying again
+        }
+        else
+        {
+          usleep(1000000); //Sleep 1000 ms before retrying again
+        }
+        continue;
       }
+      if (i > 0)
+      {
+        log_text(LOG_NOTICE, "thread#%d: oltp_reconnect used %d loops to reconnect",
+                             thread_id, i);
+      }
+      for (table_id = 0; table_id < args.num_tables; table_id++)
+      {
+        if (prepare_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
+                             bind_bufs + thread_id,
+                             connections[thread_id],
+                             get_table_name(table_id, buf)))
+        {
+          log_text(LOG_FATAL, "thread#%d: failed to prepare statements for test",
+                   thread_id);
+          if (ignore == 0)
+            return 1;
+          retry = 1;
+        }
+      }
+      if (retry == 0)
+        return 0;
     }
   }
-  return 0;
+  return 1;
 }
 
 
