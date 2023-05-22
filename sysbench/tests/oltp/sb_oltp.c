@@ -1757,7 +1757,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
             local_deadlocks++;
             retry = 1;
             /* exit for loop */
-            break;  
+            break;
           }
           else if (rc != SB_DB_ERROR_NONE)
           {

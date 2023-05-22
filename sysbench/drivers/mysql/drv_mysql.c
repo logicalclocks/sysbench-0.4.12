@@ -828,6 +828,13 @@ int mysql_drv_store_results(db_result_set_t *rs)
       }
 
       log_text(LOG_ALERT, "MySQL error: %s\n", mysql_error(con));
+      if (rc == 2013 ||
+          rc == 2006 ||
+          rc == ER_SERVER_SHUTDOWN ||
+          rc == ER_SHUTDOWN_COMPLETE ||
+          rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+          rc == ER_NORMAL_SERVER_SHUTDOWN)
+        return SB_DB_ERROR_SHUTDOWN;
       return SB_DB_ERROR_FAILED;
     }
     rs->nrows = mysql_stmt_num_rows(rs->statement->ptr);
@@ -859,6 +866,13 @@ int mysql_drv_store_results(db_result_set_t *rs)
         return SB_DB_ERROR_DEADLOCK;
       }
     log_text(LOG_ALERT, "MySQL error: %s", mysql_error(con));
+    if (rc == 2013 ||
+        rc == 2006 ||
+        rc == ER_SERVER_SHUTDOWN ||
+        rc == ER_SHUTDOWN_COMPLETE ||
+        rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+        rc == ER_NORMAL_SERVER_SHUTDOWN)
+      return SB_DB_ERROR_SHUTDOWN;
     return SB_DB_ERROR_FAILED; 
   }
   rs->ptr = (void *)res;
