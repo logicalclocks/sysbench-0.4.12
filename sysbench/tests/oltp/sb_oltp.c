@@ -1,5 +1,5 @@
 /* Copyright (c) 2004, 2016 Oracle and/or its affiliates. All rights reserved.
-   Copyright (c) 2021, 2022 Hopsworks and/or its affiliates.
+   Copyright (c) 2021, 2023 Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1893,6 +1893,7 @@ int oltp_reconnect(int thread_id, int ignore)
   }
   if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
     return 1;
+  usleep(1000); //Sleep 1 ms before retrying again
   for (i = 0; i < 400; i++)
   {
     if (!(connections[thread_id] = oltp_connect()))

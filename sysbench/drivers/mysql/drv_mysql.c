@@ -1,4 +1,5 @@
 /* Copyright (C) 2004 MySQL AB
+   Copyright (c) 2023, 2023 Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -665,6 +666,7 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
                mysql_errno(con->ptr),
                mysql_error(con->ptr));
       if (rc == 2013 ||
+          rc == 2006 ||
           rc == ER_SERVER_SHUTDOWN ||
           rc == ER_SHUTDOWN_COMPLETE ||
           rc == ER_SERVER_SHUTDOWN_COMPLETE ||
@@ -747,13 +749,14 @@ int mysql_drv_query(db_conn_t *sb_conn, const char *query,
     log_text(LOG_ALERT, "failed to execute MySQL query: `%s`:", query);
     log_text(LOG_ALERT, "Error %d %s", mysql_errno(con), mysql_error(con));
     if (rc == 2013 ||
+        rc == 2006 ||
         rc == ER_SERVER_SHUTDOWN ||
         rc == ER_SHUTDOWN_COMPLETE ||
         rc == ER_SERVER_SHUTDOWN_COMPLETE ||
         rc == ER_NORMAL_SERVER_SHUTDOWN)
       return SB_DB_ERROR_SHUTDOWN;
     return SB_DB_ERROR_FAILED; 
-  }  
+  }
 
   return SB_DB_ERROR_NONE;
 }
