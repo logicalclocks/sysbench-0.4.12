@@ -501,7 +501,7 @@ int oltp_cmd_prepare(void)
 int handle_query(db_conn_t *con, const char *query, const char *err_message)
 {
   unsigned int retry_count = 0;
-  while (db_query(con, query) == NULL)
+  while (db_query(con, query, 0) == NULL)
   {
     log_text(LOG_FATAL, err_message);
     if (con->db_errno == SB_DB_ERROR_DEADLOCK)
@@ -1699,7 +1699,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
         if (sb_globals.debug)
           sb_timer_start(exec_timers + thread_id);
 
-        rs = db_execute(stmt);
+        rs = db_execute(stmt, thread_id);
 
         if (sb_globals.debug)
           sb_timer_stop(exec_timers + thread_id);
@@ -1737,7 +1737,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
           if (sb_globals.debug)
             sb_timer_start(fetch_timers + thread_id);
           
-          rc = db_store_results(rs);
+          rc = db_store_results(rs, thread_id);
 
           if (sb_globals.debug)
             sb_timer_stop(fetch_timers + thread_id);

@@ -158,14 +158,14 @@ static int mysql_drv_disconnect(db_conn_t *);
 static int mysql_drv_prepare(db_stmt_t *, const char *);
 static int mysql_drv_bind_param(db_stmt_t *, db_bind_t *, unsigned int);
 static int mysql_drv_bind_result(db_stmt_t *, db_bind_t *, unsigned int);
-static int mysql_drv_execute(db_stmt_t *, db_result_set_t *);
+static int mysql_drv_execute(db_stmt_t *, db_result_set_t *, int);
 static int mysql_drv_fetch(db_result_set_t *);
 static int mysql_drv_fetch_row(db_result_set_t *, db_row_t *);
 static unsigned long long mysql_drv_num_rows(db_result_set_t *);
-static int mysql_drv_query(db_conn_t *, const char *, db_result_set_t *);
+static int mysql_drv_query(db_conn_t *, const char *, db_result_set_t *, int);
 static int mysql_drv_free_results(db_result_set_t *);
 static int mysql_drv_close(db_stmt_t *);
-static int mysql_drv_store_results(db_result_set_t *);
+static int mysql_drv_store_results(db_result_set_t *, int);
 static int mysql_drv_done(void);
 
 /* MySQL driver definition */
@@ -633,7 +633,7 @@ int mysql_drv_bind_result(db_stmt_t *stmt, db_bind_t *params, unsigned int len)
 /* Execute prepared statement */
 
 
-int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
+int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs, int thread_id)
 {
   db_conn_t       *con = stmt->connection;
   char            *buf = NULL;
@@ -662,7 +662,9 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
       if (rc == ER_LOCK_DEADLOCK || rc == ER_LOCK_WAIT_TIMEOUT || 
           rc == ER_CHECKREAD)
         return SB_DB_ERROR_DEADLOCK;
-      log_text(LOG_ALERT, "failed to execute mysql_stmt_execute(): Err%d %s",
+      log_text(LOG_ALERT,
+               "thread#%d: failed to execute mysql_stmt_execute(): Err%d %s",
+               thread_id,
                mysql_errno(con->ptr),
                mysql_error(con->ptr));
       if (rc == 2013 ||
@@ -716,7 +718,7 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
   }
   buf[j] = '\0';
   
-  con->db_errno = mysql_drv_query(con, buf, rs);
+  con->db_errno = mysql_drv_query(con, buf, rs, thread_id);
   free(buf);
   if (con->db_errno != SB_DB_ERROR_NONE)
   {
@@ -731,8 +733,10 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
 /* Execute SQL query */
 
 
-int mysql_drv_query(db_conn_t *sb_conn, const char *query,
-                      db_result_set_t *rs)
+int mysql_drv_query(db_conn_t *sb_conn,
+                    const char *query,
+                    db_result_set_t *rs,
+                    int thread_id)
 {
   MYSQL *con = sb_conn->ptr;
   unsigned int rc;
@@ -746,8 +750,14 @@ int mysql_drv_query(db_conn_t *sb_conn, const char *query,
     DEBUG("mysql_errno(%p) = %u", con, rc);
     if (rc == ER_LOCK_DEADLOCK || rc == ER_LOCK_WAIT_TIMEOUT || rc == ER_CHECKREAD)
       return SB_DB_ERROR_DEADLOCK;
-    log_text(LOG_ALERT, "failed to execute MySQL query: `%s`:", query);
-    log_text(LOG_ALERT, "Error %d %s", mysql_errno(con), mysql_error(con));
+    log_text(LOG_ALERT,
+             "thread#%d: failed to execute MySQL query: `%s`:"
+             "Error %d %s",
+             thread_id,
+             query,
+             mysql_errno(con),
+             mysql_error(con));
+    log_text(LOG_ALERT,
     if (rc == 2013 ||
         rc == 2006 ||
         rc == ER_SERVER_SHUTDOWN ||
@@ -799,7 +809,7 @@ unsigned long long mysql_drv_num_rows(db_result_set_t *rs)
 /* Store results from the last query */
 
 
-int mysql_drv_store_results(db_result_set_t *rs)
+int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
 {
   MYSQL        *con = rs->connection->ptr;
   MYSQL_RES    *res;
@@ -827,7 +837,8 @@ int mysql_drv_store_results(db_result_set_t *rs)
         return SB_DB_ERROR_DEADLOCK;
       }
 
-      log_text(LOG_ALERT, "MySQL error: %s\n", mysql_error(con));
+      log_text(LOG_ALERT, "thread#%d: MySQL error: %s\n",
+               thread_id, mysql_error(con));
       if (rc == 2013 ||
           rc == 2006 ||
           rc == ER_SERVER_SHUTDOWN ||
@@ -865,7 +876,8 @@ int mysql_drv_store_results(db_result_set_t *rs)
                  mysql_error(con));
         return SB_DB_ERROR_DEADLOCK;
       }
-    log_text(LOG_ALERT, "MySQL error: %s", mysql_error(con));
+    log_text(LOG_ALERT, "thread#%d: MySQL error: %s",
+             thread_id, mysql_error(con));
     if (rc == 2013 ||
         rc == 2006 ||
         rc == ER_SERVER_SHUTDOWN ||

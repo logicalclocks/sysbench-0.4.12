@@ -279,7 +279,7 @@ int db_bind_param(db_stmt_t *stmt, db_bind_t *params, unsigned int len)
 /* Execute prepared statement */
 
 
-db_result_set_t *db_execute(db_stmt_t *stmt)
+db_result_set_t *db_execute(db_stmt_t *stmt, int thread_id)
 {
   db_conn_t       *con = stmt->connection;
   db_result_set_t *rs = &con->rs;
@@ -296,7 +296,7 @@ db_result_set_t *db_execute(db_stmt_t *stmt)
   rs->statement = stmt;
   rs->connection = con;
 
-  con->db_errno = con->driver->ops.execute(stmt, rs);
+  con->db_errno = con->driver->ops.execute(stmt, rs, thread_id);
   if (con->db_errno != SB_DB_ERROR_NONE)
   {
     log_text(LOG_DEBUG, "ERROR: exiting db_execute(), driver's execute method failed");
@@ -354,7 +354,7 @@ db_row_t *db_fetch_row(db_result_set_t *rs)
 /* Execute non-prepared statement */
 
 
-db_result_set_t *db_query(db_conn_t *con, const char *query)
+db_result_set_t *db_query(db_conn_t *con, const char *query, int thread_id)
 {
   db_result_set_t *rs = &con->rs;
   
@@ -365,7 +365,7 @@ db_result_set_t *db_query(db_conn_t *con, const char *query)
   
   rs->connection = con;
 
-  con->db_errno = con->driver->ops.query(con, query, rs);
+  con->db_errno = con->driver->ops.query(con, query, rs, thread_id);
   if (con->db_errno != SB_DB_ERROR_NONE)
     return NULL;
 
@@ -430,14 +430,14 @@ int db_close(db_stmt_t *stmt)
 /* Store result set from last query */
 
 
-int db_store_results(db_result_set_t *rs)
+int db_store_results(db_result_set_t *rs, int thread_id)
 {
   db_conn_t *con = rs->connection;
 
   if (con == NULL || con->driver == NULL)
     return SB_DB_ERROR_FAILED;
 
-  return con->driver->ops.store_results(rs);
+  return con->driver->ops.store_results(rs, thread_id);
 }
 
 
