@@ -757,7 +757,6 @@ int mysql_drv_query(db_conn_t *sb_conn,
              query,
              mysql_errno(con),
              mysql_error(con));
-    log_text(LOG_ALERT,
     if (rc == 2013 ||
         rc == 2006 ||
         rc == ER_SERVER_SHUTDOWN ||
