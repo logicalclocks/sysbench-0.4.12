@@ -678,6 +678,9 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs, int thread_id)
         return SB_DB_ERROR_SHUTDOWN;
       }
       log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+               thread_id,
+               mysql_errno(con->ptr),
+               mysql_error(con->ptr));
       return SB_DB_ERROR_FAILED;
     }
     return SB_DB_ERROR_NONE;
@@ -772,7 +775,10 @@ int mysql_drv_query(db_conn_t *sb_conn,
       return SB_DB_ERROR_SHUTDOWN;
     }
     log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
-    return SB_DB_ERROR_FAILED; 
+             thread_id,
+             mysql_errno(con->ptr),
+             mysql_error(con->ptr));
+    return SB_DB_ERROR_FAILED;
   }
 
   return SB_DB_ERROR_NONE;
@@ -858,6 +864,9 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
         return SB_DB_ERROR_SHUTDOWN;
       }
       log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+               thread_id,
+               mysql_errno(con->ptr),
+               mysql_error(con->ptr));
       return SB_DB_ERROR_FAILED;
     }
     rs->nrows = mysql_stmt_num_rows(rs->statement->ptr);
@@ -874,6 +883,7 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
   if (con == NULL)
   {
     log_text(LOG_ALERT, "thread#%d: failed, no connection",
+             thread_id);
     return SB_DB_ERROR_FAILED;
   }
   
@@ -905,6 +915,9 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
       return SB_DB_ERROR_SHUTDOWN;
     }
     log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+             thread_id,
+             mysql_errno(con->ptr),
+             mysql_error(con->ptr));
     return SB_DB_ERROR_FAILED; 
   }
   rs->ptr = (void *)res;
