@@ -1659,7 +1659,8 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
     if (shutdown == 1)
     {
       shutdown = 0;
-      log_text(LOG_NOTICE, "thread#%d: reconnect after shutdown failure",
+      log_text(LOG_ALERT,
+               "thread#%d: reconnect after shutdown failure",
               thread_id);
       if (oltp_reconnect(thread_id, 1))
       {
@@ -1976,7 +1977,6 @@ int oltp_reconnect(int thread_id, int ignore)
   {
     retry_count++;
     retry = 0;
-    usleep(1000); //Sleep 1 ms before retrying again
     for (table_id = 0; table_id < args.num_tables; table_id++)
     {
       close_stmt_set(get_stmt_set((unsigned int)thread_id, table_id),
@@ -1984,6 +1984,9 @@ int oltp_reconnect(int thread_id, int ignore)
     }
     if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
       return 1;
+    log_text(LOG_ALERT,
+             "thread#%d: Disconnect as part of reconnect",
+             thread_id);
     for (i = 0; i < 40; i++)
     {
       if (!(connections[thread_id] = oltp_connect()))
@@ -2002,8 +2005,15 @@ int oltp_reconnect(int thread_id, int ignore)
       }
       if (i > 0)
       {
-        log_text(LOG_NOTICE, "thread#%d: oltp_reconnect used %d loops to reconnect",
-                             thread_id, i);
+        log_text(LOG_ALERT,
+                 "thread#%d: oltp_reconnect used %d loops to reconnect",
+                 thread_id, i);
+      }
+      else
+      {
+        log_text(LOG_ALERT,
+                 "thread#%d: Connected as part of reconnect",
+                 thread_id);
       }
       for (table_id = 0; table_id < args.num_tables; table_id++)
       {
@@ -2012,17 +2022,26 @@ int oltp_reconnect(int thread_id, int ignore)
                              connections[thread_id],
                              get_table_name(table_id, buf)))
         {
-          log_text(LOG_FATAL, "thread#%d: failed to prepare statements for test",
+          log_text(LOG_ALERT, "thread#%d: failed to prepare statements for test",
                    thread_id);
           if (ignore == 0)
             return 1;
           retry = 1;
+          usleep(1000); //Sleep 1 ms before retrying again
         }
       }
       if (retry == 0)
+      {
+        log_text(LOG_ALERT,
+                 "thread#%d: Handled prepare as part of reconnect",
+                 thread_id);
         return 0;
+      }
     }
   }
+  log_text(LOG_ALERT,
+           "thread#%d: Too many retries in reconnect",
+           thread_id);
   return 1;
 }
 

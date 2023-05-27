@@ -733,7 +733,10 @@ static int run_test(sb_test_t *test)
   for(i = 0; i < sb_globals.num_threads; i++)
   {
     if((err = pthread_join(threads[i].thread, NULL)) != 0)
+    {
       log_errno(LOG_FATAL, "pthread_join() for thread #%d failed.", i);
+      usleep(10000);
+    }
   }
 
   /* Timers stopped when last thread completes */
@@ -776,8 +779,6 @@ static int run_test(sb_test_t *test)
         pthread_join(checkpoints_thread, NULL))
       log_errno(LOG_FATAL, "Terminating the checkpoint thread failed.");
   }
-  fflush(stdout);
-  fflush(stderr);
   return sb_globals.error != 0;
 }
 
@@ -1006,7 +1007,8 @@ int main(int argc, char *argv[])
   {
     if (test->cmds.prepare == NULL)
     {
-      fprintf(stderr, "'%s' test does not have the 'prepare' command.\n",
+      log_text(LOG_ALERT,
+               "'%s' test does not have the 'prepare' command.",
               test->sname);
       exit(1);
     }
@@ -1019,7 +1021,8 @@ int main(int argc, char *argv[])
   {
     if (test->cmds.cleanup == NULL)
     {
-      fprintf(stderr, "'%s' test does not have the 'cleanup' command.\n",
+      log_text(LOG_ALERT,
+               "'%s' test does not have the 'cleanup' command.",
               test->sname);
       exit(1);
     }
@@ -1032,14 +1035,16 @@ int main(int argc, char *argv[])
 #ifdef HAVE_ALARM
   signal(SIGALRM, sigalrm_handler);
 #endif
+  log_text(LOG_ALERT, "Start run_test");
   if (run_test(test))
   {
-    fprintf(stderr, "Stop after error in run_test\n");
+    log_text(LOG_ALERT, "Stop after error in run_test");
+    usleep(1000000);
     exit(1);
   }
 
   /* Uninitialize logger */
+  log_text(LOG_ALERT, "run_test Done");
   log_done();
-  
   exit(0);
 }
