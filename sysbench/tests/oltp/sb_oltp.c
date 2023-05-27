@@ -1659,11 +1659,15 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
     if (shutdown == 1)
     {
       shutdown = 0;
+      log_text(LOG_NOTICE, "thread#%d: reconnect after shutdown failure",
+              thread_id);
       if (oltp_reconnect(thread_id, 1))
       {
         log_text(LOG_FATAL, "reconnect failure %d!", thread_id);
         return 1;
       }
+      log_text(LOG_NOTICE, "thread#%d: Successful reconnect after shutdown",
+              thread_id);
     }
     SB_LIST_FOR_EACH(pos, sql_req->queries)
     {

@@ -776,7 +776,8 @@ static int run_test(sb_test_t *test)
         pthread_join(checkpoints_thread, NULL))
       log_errno(LOG_FATAL, "Terminating the checkpoint thread failed.");
   }
-
+  fflush(stdout);
+  fflush(stderr);
   return sb_globals.error != 0;
 }
 
@@ -1032,7 +1033,10 @@ int main(int argc, char *argv[])
   signal(SIGALRM, sigalrm_handler);
 #endif
   if (run_test(test))
+  {
+    fprintf(stderr, "Stop after error in run_test\n");
     exit(1);
+  }
 
   /* Uninitialize logger */
   log_done();
