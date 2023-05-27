@@ -1642,7 +1642,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
   unsigned int        local_other_ops=0;
   unsigned int        local_deadlocks=0;
   int                 retry;
-  int                 shutdown;
+  int                 shutdown = 0;
   log_msg_t           msg;
   log_msg_oper_t      op_msg;
   unsigned long long  nrows;
@@ -1653,22 +1653,20 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
 
   /* measure the time for transaction */
   LOG_EVENT_START(msg, thread_id);
-
   do  /* deadlock handling */
   {
     retry = 0;
-    shutdown = 0;
+    if (shutdown == 1)
+    {
+      shutdown = 0;
+      if (oltp_reconnect(thread_id, 1))
+      {
+        log_text(LOG_FATAL, "reconnect failure %d!", thread_id);
+        return 1;
+      }
+    }
     SB_LIST_FOR_EACH(pos, sql_req->queries)
     {
-      if (shutdown == 1)
-      {
-        shutdown = 0;
-        if (oltp_reconnect(thread_id, 1))
-        {
-          log_text(LOG_FATAL, "reconnect failure %d!", thread_id);
-          return 1;
-        }
-      }
       query = SB_LIST_ENTRY(pos, sb_sql_query_t, listitem);
 
       for(i = 0; i < query->num_times; i++)
