@@ -776,8 +776,8 @@ int mysql_drv_query(db_conn_t *sb_conn,
     }
     log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
              thread_id,
-             mysql_errno(con->ptr),
-             mysql_error(con->ptr));
+             mysql_errno(con),
+             mysql_error(con));
     return SB_DB_ERROR_FAILED;
   }
 
@@ -852,7 +852,7 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
 
       log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s",
                thread_id,
-               mysql_errno(con->ptr),
+               mysql_errno(con),
                mysql_error(con));
       if (rc == 2013 ||
           rc == 2006 ||
@@ -865,8 +865,8 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
       }
       log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
                thread_id,
-               mysql_errno(con->ptr),
-               mysql_error(con->ptr));
+               mysql_errno(con),
+               mysql_error(con));
       return SB_DB_ERROR_FAILED;
     }
     rs->nrows = mysql_stmt_num_rows(rs->statement->ptr);
@@ -903,7 +903,7 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
       }
     log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s",
              thread_id,
-             mysql_errno(con->ptr),
+             mysql_errno(con),
              mysql_error(con));
     if (rc == 2013 ||
         rc == 2006 ||
@@ -916,8 +916,8 @@ int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
     }
     log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
              thread_id,
-             mysql_errno(con->ptr),
-             mysql_error(con->ptr));
+             mysql_errno(con),
+             mysql_error(con));
     return SB_DB_ERROR_FAILED; 
   }
   rs->ptr = (void *)res;
