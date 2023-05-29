@@ -1659,7 +1659,7 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
     if (shutdown == 1)
     {
       shutdown = 0;
-      log_text(LOG_ALERT,
+      log_text(LOG_NOTICE,
                "thread#%d: reconnect after shutdown failure",
               thread_id);
       if (oltp_reconnect(thread_id, 1))
@@ -1984,8 +1984,8 @@ int oltp_reconnect(int thread_id, int ignore)
     }
     if (oltp_disconnect(connections[thread_id]) && (ignore == 0))
       return 1;
-    log_text(LOG_ALERT,
-             "thread#%d: Disconnect as part of reconnect",
+    log_text(LOG_NOTICE,
+             "thread#%d: Disconnected as part of reconnect",
              thread_id);
     for (i = 0; i < 40; i++)
     {
@@ -2011,7 +2011,7 @@ int oltp_reconnect(int thread_id, int ignore)
       }
       else
       {
-        log_text(LOG_ALERT,
+        log_text(LOG_NOTICE,
                  "thread#%d: Connected as part of reconnect",
                  thread_id);
       }
@@ -2032,7 +2032,7 @@ int oltp_reconnect(int thread_id, int ignore)
       }
       if (retry == 0)
       {
-        log_text(LOG_ALERT,
+        log_text(LOG_NOTICE,
                  "thread#%d: Handled prepare as part of reconnect",
                  thread_id);
         return 0;

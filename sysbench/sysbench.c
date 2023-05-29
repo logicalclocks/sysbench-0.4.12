@@ -818,7 +818,7 @@ static int init(void)
   long              res;
 
   sb_globals.num_threads = sb_get_value_int("num-threads");
-  if (sb_globals.num_threads <= 0)
+  if (sb_globals.num_threads == 0)
   {
     log_text(LOG_FATAL, "Invalid value for --num-threads: %d.\n", sb_globals.num_threads);
     return 1;
@@ -1035,7 +1035,7 @@ int main(int argc, char *argv[])
 #ifdef HAVE_ALARM
   signal(SIGALRM, sigalrm_handler);
 #endif
-  log_text(LOG_ALERT, "Start run_test");
+  log_text(LOG_NOTICE, "Start run_test");
   if (run_test(test))
   {
     log_text(LOG_ALERT, "Stop after error in run_test");
@@ -1044,7 +1044,7 @@ int main(int argc, char *argv[])
   }
 
   /* Uninitialize logger */
-  log_text(LOG_ALERT, "run_test Done");
+  log_text(LOG_NOTICE, "run_test Done");
   log_done();
   exit(0);
 }

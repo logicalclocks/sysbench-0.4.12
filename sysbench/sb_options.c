@@ -80,6 +80,7 @@ option_t *sb_find_option(char *name)
 int set_option(const char *name, const char *value, sb_arg_type_t type)
 {
   option_t *opt;
+  char     *tmp_buf;
   char     *tmp;
 
   opt = add_option(&options, name);
@@ -102,10 +103,11 @@ int set_option(const char *name, const char *value, sb_arg_type_t type)
       add_value(&opt->values, value);
       break;
     case SB_ARG_TYPE_LIST:
-      tmp = strdup(value);
+      tmp_buf = strdup(value);
+      tmp = tmp_buf;
       for (tmp = strtok(tmp, ","); tmp != NULL; tmp = strtok(NULL, ","))
         add_value(&opt->values, tmp);
-      free(tmp);
+      free(tmp_buf);
       break;
     default:
       printf("Unknown argument type: %d", type);
