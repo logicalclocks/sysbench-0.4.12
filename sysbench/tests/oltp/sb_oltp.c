@@ -1989,13 +1989,16 @@ int oltp_reconnect(int thread_id, int ignore)
              thread_id);
     for (i = 0; i < 40; i++)
     {
+      //Ensure not all threads connect simultaneously
+      int sleep_time = thread_id * 100;
+      usleep(sleep_time);
       if (!(connections[thread_id] = oltp_connect()))
       {
         if (ignore == 0)
           return 1;
         if (i < 3)
         {
-          usleep(1000); //Sleep 1 ms before retrying again
+          usleep(10000); //Sleep 10 ms before retrying again
         }
         else
         {
