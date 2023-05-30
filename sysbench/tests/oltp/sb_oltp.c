@@ -340,15 +340,21 @@ static int prepare_stmt_set(oltp_stmt_set_t *,
 static int prepare_stmt_set_trx(oltp_stmt_set_t *,
                                 oltp_bind_set_t *,
                                 db_conn_t *,
-                                char *);
+                                char *,
+                                db_bind_t*,
+                                char*);
 static int prepare_stmt_set_nontrx(oltp_stmt_set_t *,
                                    oltp_bind_set_t *,
                                    db_conn_t *,
-                                   char *);
+                                   char *,
+                                   db_bind_t*,
+                                   char*);
 static int prepare_stmt_set_sp(oltp_stmt_set_t *,
                                oltp_bind_set_t *,
                                db_conn_t *,
-                               char *);
+                               char *,
+                               db_bind_t*,
+                               char*);
 
 static void oltp_reset_stats(void);
 
@@ -2216,13 +2222,41 @@ int prepare_stmt_set(oltp_stmt_set_t *set,
                      db_conn_t *conn,
                      char *table_name)
 {
+  int ret_code = 0;
+  db_bind_t *binds = (db_bind_t*)calloc(1024 * sizeof(db_bind_t));
+  if (binds == NULL)
+    return 1;
+  char* query = (char*)calloc(MAX_QUERY_LEN);
+  if (query == NULL)
+  {
+    free(binds);
+    return 1;
+  }
   if (args.test_mode == TEST_MODE_NONTRX)
-    return prepare_stmt_set_nontrx(set, bufs, conn, table_name);
+    ret_code = prepare_stmt_set_nontrx(set,
+                                       bufs,
+                                       conn,
+                                       table_name,
+                                       binds,
+                                       query);
   else if (args.test_mode == TEST_MODE_COMPLEX ||
            args.test_mode == TEST_MODE_SIMPLE)
-    return prepare_stmt_set_trx(set, bufs, conn, table_name);
-
-  return prepare_stmt_set_sp(set, bufs, conn, table_name);
+    ret_code = prepare_stmt_set_trx(set,
+                                    bufs,
+                                    conn,
+                                    table_name,
+                                    binds,
+                                    query);
+  else
+    ret_code = prepare_stmt_set_sp(set,
+                                   bufs,
+                                   conn,
+                                   table_name,
+                                   binds,
+                                   query);
+  free(binds);
+  free(query);
+  return ret_code;
 }
 
 
@@ -2286,11 +2320,10 @@ db_stmt_t *get_sql_statement(sb_sql_query_t *query, int thread_id)
 int prepare_stmt_set_sp(oltp_stmt_set_t *set,
                         oltp_bind_set_t *bufs,
                         db_conn_t *conn,
-                        char *table_name)
+                        char *table_name,
+                        db_bind_t *params,
+                        char *query)
 {
-  db_bind_t params[2];
-  char      query[MAX_QUERY_LEN];
-
   (void) table_name; /* Not used here */
  
   /* Prepare CALL statement */
@@ -2317,11 +2350,11 @@ int prepare_stmt_set_sp(oltp_stmt_set_t *set,
 int prepare_stmt_set_trx(oltp_stmt_set_t *set,
                          oltp_bind_set_t *bufs,
                          db_conn_t *conn,
-                         char *table_name)
+                         char *table_name,
+                         db_bind_t *binds,
+                         char *query)
 {
   unsigned int i;
-  db_bind_t binds[1001];
-  char      query[MAX_QUERY_LEN];
 
   /* Prepare the point statement */
   if  (args.point_select_mysql_handler)
@@ -2635,10 +2668,10 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
 int prepare_stmt_set_nontrx(oltp_stmt_set_t *set,
                             oltp_bind_set_t *bufs,
                             db_conn_t *conn,
-                            char *table_name)
+                            char *table_name,
+                            db_bind_t *binds,
+                            char *query)
 {
-  db_bind_t binds[11];
-  char      query[MAX_QUERY_LEN];
 
   /* Prepare the point statement */
   snprintf(query, MAX_QUERY_LEN, "SELECT pad from %s where id=?",
