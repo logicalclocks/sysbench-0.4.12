@@ -2223,10 +2223,10 @@ int prepare_stmt_set(oltp_stmt_set_t *set,
                      char *table_name)
 {
   int ret_code = 0;
-  db_bind_t *binds = (db_bind_t*)calloc(1024 * sizeof(db_bind_t));
+  db_bind_t *binds = (db_bind_t*)calloc(1, 1024 * sizeof(db_bind_t));
   if (binds == NULL)
     return 1;
-  char* query = (char*)calloc(MAX_QUERY_LEN);
+  char* query = (char*)calloc(1, MAX_QUERY_LEN);
   if (query == NULL)
   {
     free(binds);
