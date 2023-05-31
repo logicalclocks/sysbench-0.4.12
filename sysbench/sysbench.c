@@ -1061,16 +1061,15 @@ int main(int argc, char *argv[])
 #ifdef HAVE_ALARM
   signal(SIGALRM, sigalrm_handler);
 #endif
-  log_text(LOG_NOTICE, "Start run_test");
+  log_text(LOG_DEBUG, "Start run_test");
   if (run_test(test))
   {
     log_text(LOG_ALERT, "Stop after error in run_test");
-    usleep(1000000);
     exit(1);
   }
 
   /* Uninitialize logger */
-  log_text(LOG_NOTICE, "run_test Done");
+  log_text(LOG_DEBUG, "run_test Done");
   log_done();
   exit(0);
 }
