@@ -521,6 +521,7 @@ int handle_query(db_conn_t *con, const char *query, const char *err_message)
       con->db_errno = SB_DB_ERROR_NONE;
       continue;
     }
+    log_text(LOG_FATAL, "Error code: %d", con->db_errno);
     return -1;
   }
   return 0;
