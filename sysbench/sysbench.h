@@ -1,4 +1,5 @@
 /* Copyright (C) 2004 MySQL AB
+   Copyright (c) 2023, 2023, Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -130,7 +131,7 @@ typedef int sb_op_prepare(void);
 typedef int sb_op_thread_init(int);
 typedef void sb_op_print_mode(void);
 typedef sb_request_t sb_op_get_request(int);
-typedef int sb_op_execute_request(sb_request_t *, int);
+typedef int sb_op_execute_request(sb_request_t *, int, int);
 typedef void sb_op_print_stats(sb_stat_t);
 typedef int sb_op_thread_done(int);
 typedef int sb_op_cleanup(void);

@@ -1,4 +1,5 @@
 /* Copyright (c) 2004, 2015 Oracle and/or its affiliates. All rights reserved. 
+   Copyright (c) 2023, 2023, Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -180,12 +181,14 @@ static sb_request_t get_request(sb_test_t *test, int thread_id)
 /* Main request execution function */
 
 
-static int execute_request(sb_test_t *test, sb_request_t *r,int thread_id)
+static int execute_request(sb_test_t *test,
+                           sb_request_t *r,int thread_id,
+                           int reconnect_flag)
 {
   unsigned int rc;
   
   if (test->ops.execute_request != NULL)
-    rc = test->ops.execute_request(r, thread_id);
+    rc = test->ops.execute_request(r, thread_id, reconnect_flag);
   else
   {
     log_text(LOG_FATAL, "Unknown request. Aborting");
@@ -424,6 +427,7 @@ static void *runner_thread(void *arg)
   long long        jitter_ns = 0;
   long long        pause_ns;
   struct timespec  target_tv, now_tv;
+  sb_timer_t       reconnect_timer;
   
   ctxt = (sb_thread_ctxt_t *)arg;
   test = ctxt->test;
@@ -466,13 +470,35 @@ static void *runner_thread(void *arg)
     usleep(pause_ns / 1000);
   }
 
+  /**
+   * Hopsworks will remove the MySQL Servers from Consul 7 seconds before the
+   * MySQL Server is stopped. Thus reconnecting every 3-4 seconds should ensure
+   * that we don't see any temporary errors. We also add a few milliseconds
+   * extra wait based on thread_id to ensure that not all threads reconnect
+   * at the same time. This will ensure that they drift apart more and more
+   * as the test runs.
+   */
+  unsigned long long reconnect_limit = (unsigned long long)1000;
+  reconnect_limit *= (unsigned long long)1000;
+  unsigned long long base_time = (unsigned long long)3000;
+  unsigned long long added_time = (unsigned long long)thread_id;
+  unsigned long long total_time = base_time + added_time;
+  reconnect_limit *= total_time;
+  sb_timer_start(&reconnect_timer);
   do
   {
     request = get_request(test, thread_id);
     /* check if we shall execute it */
     if (request.type != SB_REQ_TYPE_NULL)
     {
-      if (execute_request(test, &request, thread_id))
+      int reconnect_flag = 0;
+      unsigned long long time_passed = sb_timer_value(&reconnect_timer);
+      if (time_passed > reconnect_limit)
+      {
+        reconnect_flag = 1;
+        sb_timer_start(&reconnect_timer);
+      }
+      if (execute_request(test, &request, thread_id, reconnect_flag))
       {
         log_text(LOG_FATAL, "Runner thread execute query failed (%d)!", thread_id);
         break; /* break if error returned (terminates only one thread) */

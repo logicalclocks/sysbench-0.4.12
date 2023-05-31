@@ -1633,7 +1633,9 @@ sb_request_t get_request_nontrx(int tid)
  */
 
 
-int oltp_execute_request(sb_request_t *sb_req, int thread_id)
+int oltp_execute_request(sb_request_t *sb_req,
+                         int thread_id,
+                         int reconnect_flag)
 {
   db_stmt_t           *stmt;
   sb_sql_request_t    *sql_req = &sb_req->u.sql_request;
@@ -1652,7 +1654,18 @@ int oltp_execute_request(sb_request_t *sb_req, int thread_id)
   log_msg_t           msg;
   log_msg_oper_t      op_msg;
   unsigned long long  nrows;
-  
+
+  if (reconnect_flag > 0)
+  {
+    /* Perform ordered reconnect before starting timer of transaction */
+    if (oltp_reconnect(thread_id, 1))
+    {
+      log_text(LOG_FATAL, "Ordered reconnect failure %d!", thread_id);
+      return 1;
+    }
+    log_text(LOG_DEBUG, "thread#%d: Successful reconnect after order",
+             thread_id);
+  }
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;
   msg.data = &op_msg;
