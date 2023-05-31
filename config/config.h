@@ -44,10 +44,10 @@
 #define HAVE_LARGE_PAGES 1
 
 /* Define to 1 if you have the `aio' library (-laio). */
-#define HAVE_LIBAIO 1
+/* #undef HAVE_LIBAIO */
 
 /* Define to 1 if your system has <libaio.h> header file */
-#define HAVE_LIBAIO_H 1
+/* #undef HAVE_LIBAIO_H */
 
 /* Define to 1 if you have the `m' library (-lm). */
 #define HAVE_LIBM 1
@@ -161,12 +161,8 @@
 /* Define if /proc/meminfo shows the huge page size (Linux only) */
 #define HUGETLB_USE_PROC_MEMINFO 1
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
-
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-/* #undef NO_MINUS_C_MINUS_O */
 
 /* Define to the appropriate value for O_SYNC on your platform */
 /* #undef O_SYNC */
@@ -210,12 +206,6 @@
 
 /* Define to 1 if you want to compile with MySQL support */
 #define USE_MYSQL 1
-
-/* Define to 1 if you want to compile with Oracle support */
-/* #undef USE_ORACLE */
-
-/* Define to 1 if you want to compile with PostgreSQL support */
-/* #undef USE_PGSQL */
 
 /* Version number of package */
 #define VERSION "0.4.12.10"

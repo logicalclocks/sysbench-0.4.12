@@ -221,7 +221,7 @@ static int file_init(void);
 static void file_print_mode(void);
 static int file_prepare(void);
 static sb_request_t file_get_request(int);
-static int file_execute_request(sb_request_t *, int);
+static int file_execute_request(sb_request_t *, int, int);
 #ifdef HAVE_LIBAIO
 static int file_thread_done(int);
 #endif
@@ -583,13 +583,15 @@ sb_request_t file_get_rnd_request(void)
 }
 
 
-int file_execute_request(sb_request_t *sb_req, int thread_id)
+int file_execute_request(sb_request_t *sb_req, int thread_id, int ignored)
 {
   FILE_DESCRIPTOR    fd;
   sb_file_request_t *file_req = &sb_req->u.file_request;
   log_msg_t          msg;
   log_msg_oper_t     op_msg;
-  
+
+  (void)ignored;
+
   if (sb_globals.debug)
   {
     log_text(LOG_DEBUG,

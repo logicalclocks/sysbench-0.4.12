@@ -51,7 +51,7 @@ static sb_arg_t mutex_args[] =
 static int mutex_init(void);
 static void mutex_print_mode(void);
 static sb_request_t mutex_get_request(int tid);
-static int mutex_execute_request(sb_request_t *, int);
+static int mutex_execute_request(sb_request_t *, int, int);
 static int mutex_done(void);
 
 static sb_test_t mutex_test =
@@ -144,7 +144,7 @@ sb_request_t mutex_get_request(int tid)
 }
 
 
-int mutex_execute_request(sb_request_t *sb_req, int thread_id)
+int mutex_execute_request(sb_request_t *sb_req, int thread_id, int ignored)
 {
   unsigned int         i;
   unsigned int         c=0;
@@ -152,6 +152,8 @@ int mutex_execute_request(sb_request_t *sb_req, int thread_id)
   sb_mutex_request_t   *mutex_req = &sb_req->u.mutex_request;
   log_msg_t            msg;
   log_msg_oper_t       op_msg;
+
+  (void)ignored;
 
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;

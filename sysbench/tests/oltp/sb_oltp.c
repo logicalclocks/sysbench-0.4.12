@@ -228,7 +228,7 @@ static int oltp_cmd_cleanup(void);
 static int oltp_init(void);
 static void oltp_print_mode(void);
 static sb_request_t oltp_get_request(int);
-static int oltp_execute_request(sb_request_t *, int);
+static int oltp_execute_request(sb_request_t *, int, int);
 static void oltp_print_stats(sb_stat_t type);
 static db_conn_t *oltp_connect(void);
 static int oltp_disconnect(db_conn_t *);
