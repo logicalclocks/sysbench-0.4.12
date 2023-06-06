@@ -432,6 +432,7 @@ static void *runner_thread(void *arg)
   ctxt = (sb_thread_ctxt_t *)arg;
   test = ctxt->test;
   thread_id = ctxt->id;
+  sb_timer_init(&reconnect_timer);
   
   log_text(LOG_DEBUG, "Runner thread started (%d)!", thread_id);
   if (test->ops.thread_init != NULL && test->ops.thread_init(thread_id) != 0)
