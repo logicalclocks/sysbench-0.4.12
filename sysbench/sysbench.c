@@ -427,12 +427,10 @@ static void *runner_thread(void *arg)
   long long        jitter_ns = 0;
   long long        pause_ns;
   struct timespec  target_tv, now_tv;
-  sb_timer_t       reconnect_timer;
   
   ctxt = (sb_thread_ctxt_t *)arg;
   test = ctxt->test;
   thread_id = ctxt->id;
-  sb_timer_init(&reconnect_timer);
   
   log_text(LOG_DEBUG, "Runner thread started (%d)!", thread_id);
   if (test->ops.thread_init != NULL && test->ops.thread_init(thread_id) != 0)
@@ -485,7 +483,6 @@ static void *runner_thread(void *arg)
   unsigned long long added_time = (unsigned long long)thread_id;
   unsigned long long total_time = base_time + added_time;
   reconnect_limit *= total_time;
-  sb_timer_start(&reconnect_timer);
   do
   {
     request = get_request(test, thread_id);
@@ -493,12 +490,6 @@ static void *runner_thread(void *arg)
     if (request.type != SB_REQ_TYPE_NULL)
     {
       int reconnect_flag = 0;
-      unsigned long long time_passed = sb_timer_value(&reconnect_timer);
-      if (time_passed > reconnect_limit)
-      {
-        reconnect_flag = 1;
-        sb_timer_start(&reconnect_timer);
-      }
       if (execute_request(test, &request, thread_id, reconnect_flag))
       {
         log_text(LOG_FATAL, "Runner thread execute query failed (%d)!", thread_id);
