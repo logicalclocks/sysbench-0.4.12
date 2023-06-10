@@ -46,7 +46,7 @@ AC_SUBST(CC_VERSION)
 
 # Checks for user arguments
 
-AC_LIB_PREFIX()
+#AC_LIB_PREFIX()
 # Additional linker flags
 AC_ARG_WITH([extra-ldflags],
               AS_HELP_STRING([--with-extra-ldflags],[additional linker flags, e.g. -all-static]),

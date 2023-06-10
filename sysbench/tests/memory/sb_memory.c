@@ -56,7 +56,7 @@ static sb_arg_t memory_args[] =
 static int memory_init(void);
 static void memory_print_mode(void);
 static sb_request_t memory_get_request(int);
-static int memory_execute_request(sb_request_t *, int);
+static int memory_execute_request(sb_request_t *, int, int);
 static void memory_print_stats(sb_stat_t type);
 
 static sb_test_t memory_test =
@@ -242,7 +242,7 @@ sb_request_t memory_get_request(int tid)
   return req;
 }
 
-int memory_execute_request(sb_request_t *sb_req, int thread_id)
+int memory_execute_request(sb_request_t *sb_req, int thread_id, int ignored)
 {
   sb_mem_request_t    *mem_req = &sb_req->u.mem_request;
   int                 tmp = 0;
@@ -252,7 +252,9 @@ int memory_execute_request(sb_request_t *sb_req, int thread_id)
   log_msg_oper_t      op_msg;
   long                i;
   unsigned int        rand;
-  
+ 
+  (void)ignored;
+
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;
   msg.data = &op_msg;

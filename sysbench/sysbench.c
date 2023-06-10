@@ -1,4 +1,5 @@
 /* Copyright (c) 2004, 2015 Oracle and/or its affiliates. All rights reserved. 
+   Copyright (c) 2023, 2023, Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -180,12 +181,14 @@ static sb_request_t get_request(sb_test_t *test, int thread_id)
 /* Main request execution function */
 
 
-static int execute_request(sb_test_t *test, sb_request_t *r,int thread_id)
+static int execute_request(sb_test_t *test,
+                           sb_request_t *r,int thread_id,
+                           int reconnect_flag)
 {
   unsigned int rc;
   
   if (test->ops.execute_request != NULL)
-    rc = test->ops.execute_request(r, thread_id);
+    rc = test->ops.execute_request(r, thread_id, reconnect_flag);
   else
   {
     log_text(LOG_FATAL, "Unknown request. Aborting");
@@ -466,13 +469,28 @@ static void *runner_thread(void *arg)
     usleep(pause_ns / 1000);
   }
 
+  /**
+   * Hopsworks will remove the MySQL Servers from Consul 7 seconds before the
+   * MySQL Server is stopped. Thus reconnecting every 3-4 seconds should ensure
+   * that we don't see any temporary errors. We also add a few milliseconds
+   * extra wait based on thread_id to ensure that not all threads reconnect
+   * at the same time. This will ensure that they drift apart more and more
+   * as the test runs.
+   */
+  unsigned long long reconnect_limit = (unsigned long long)1000;
+  reconnect_limit *= (unsigned long long)1000;
+  unsigned long long base_time = (unsigned long long)3000;
+  unsigned long long added_time = (unsigned long long)thread_id;
+  unsigned long long total_time = base_time + added_time;
+  reconnect_limit *= total_time;
   do
   {
     request = get_request(test, thread_id);
     /* check if we shall execute it */
     if (request.type != SB_REQ_TYPE_NULL)
     {
-      if (execute_request(test, &request, thread_id))
+      int reconnect_flag = 0;
+      if (execute_request(test, &request, thread_id, reconnect_flag))
       {
         log_text(LOG_FATAL, "Runner thread execute query failed (%d)!", thread_id);
         break; /* break if error returned (terminates only one thread) */
@@ -733,7 +751,10 @@ static int run_test(sb_test_t *test)
   for(i = 0; i < sb_globals.num_threads; i++)
   {
     if((err = pthread_join(threads[i].thread, NULL)) != 0)
+    {
       log_errno(LOG_FATAL, "pthread_join() for thread #%d failed.", i);
+      usleep(10000);
+    }
   }
 
   /* Timers stopped when last thread completes */
@@ -776,7 +797,6 @@ static int run_test(sb_test_t *test)
         pthread_join(checkpoints_thread, NULL))
       log_errno(LOG_FATAL, "Terminating the checkpoint thread failed.");
   }
-
   return sb_globals.error != 0;
 }
 
@@ -816,7 +836,7 @@ static int init(void)
   long              res;
 
   sb_globals.num_threads = sb_get_value_int("num-threads");
-  if (sb_globals.num_threads <= 0)
+  if (sb_globals.num_threads == 0)
   {
     log_text(LOG_FATAL, "Invalid value for --num-threads: %d.\n", sb_globals.num_threads);
     return 1;
@@ -1005,7 +1025,8 @@ int main(int argc, char *argv[])
   {
     if (test->cmds.prepare == NULL)
     {
-      fprintf(stderr, "'%s' test does not have the 'prepare' command.\n",
+      log_text(LOG_ALERT,
+               "'%s' test does not have the 'prepare' command.",
               test->sname);
       exit(1);
     }
@@ -1018,7 +1039,8 @@ int main(int argc, char *argv[])
   {
     if (test->cmds.cleanup == NULL)
     {
-      fprintf(stderr, "'%s' test does not have the 'cleanup' command.\n",
+      log_text(LOG_ALERT,
+               "'%s' test does not have the 'cleanup' command.",
               test->sname);
       exit(1);
     }
@@ -1031,11 +1053,15 @@ int main(int argc, char *argv[])
 #ifdef HAVE_ALARM
   signal(SIGALRM, sigalrm_handler);
 #endif
+  log_text(LOG_DEBUG, "Start run_test");
   if (run_test(test))
+  {
+    log_text(LOG_ALERT, "Stop after error in run_test");
     exit(1);
+  }
 
   /* Uninitialize logger */
+  log_text(LOG_DEBUG, "run_test Done");
   log_done();
-  
   exit(0);
 }

@@ -39,7 +39,7 @@ static sb_arg_t cpu_args[] =
 static int cpu_init(void);
 static void cpu_print_mode(void);
 static sb_request_t cpu_get_request(int);
-static int cpu_execute_request(sb_request_t *, int);
+static int cpu_execute_request(sb_request_t *, int, int);
 static int cpu_done(void);
 
 static sb_test_t cpu_test =
@@ -118,7 +118,7 @@ sb_request_t cpu_get_request(int tid)
   return req;
 }
 
-int cpu_execute_request(sb_request_t *r, int thread_id)
+int cpu_execute_request(sb_request_t *r, int thread_id, int ignored)
 {
   unsigned long long c;
   unsigned long long l,t;
@@ -127,6 +127,7 @@ int cpu_execute_request(sb_request_t *r, int thread_id)
   log_msg_oper_t      op_msg;
   
   (void)r; /* unused */
+  (void)ignored;
 
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;

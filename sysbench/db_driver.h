@@ -131,15 +131,16 @@ typedef int drv_op_disconnect(struct db_conn *);
 typedef int drv_op_prepare(struct db_stmt *, const char *);
 typedef int drv_op_bind_param(struct db_stmt *, db_bind_t *, unsigned int);
 typedef int drv_op_bind_result(struct db_stmt *, db_bind_t *, unsigned int );
-typedef int drv_op_execute(struct db_stmt *, struct db_result_set *);
+typedef int drv_op_execute(struct db_stmt *, struct db_result_set *, int);
 typedef int drv_op_fetch(struct db_result_set *);
 typedef int drv_op_fetch_row(struct db_result_set *, struct db_row *);
 typedef unsigned long long drv_op_num_rows(struct db_result_set *);
 typedef int drv_op_query(struct db_conn *, const char *,
-                         struct db_result_set *);
+                         struct db_result_set *,
+                         int);
 typedef int drv_op_free_results(struct db_result_set *);
 typedef int drv_op_close(struct db_stmt *);
-typedef int drv_op_store_results(struct db_result_set *);
+typedef int drv_op_store_results(struct db_result_set *, int);
 typedef int drv_op_done(void);
 
 typedef struct
@@ -244,17 +245,17 @@ int db_bind_param(db_stmt_t *, db_bind_t *, unsigned int);
 
 int db_bind_result(db_stmt_t *, db_bind_t *, unsigned int);
 
-db_result_set_t *db_execute(db_stmt_t *);
+db_result_set_t *db_execute(db_stmt_t *, int);
 
 db_row_t *db_fetch_row(db_result_set_t *);
 
 unsigned long long db_num_rows(db_result_set_t *);
 
-db_result_set_t *db_query(db_conn_t *, const char *);
+db_result_set_t *db_query(db_conn_t *, const char *, int);
 
 int db_free_results(db_result_set_t *);
 
-int db_store_results(db_result_set_t *);
+int db_store_results(db_result_set_t *, int);
 
 int db_close(db_stmt_t *);
 

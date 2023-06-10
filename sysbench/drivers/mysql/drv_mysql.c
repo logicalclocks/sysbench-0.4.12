@@ -1,4 +1,5 @@
 /* Copyright (C) 2004 MySQL AB
+   Copyright (c) 2023, 2023 Hopsworks and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -157,14 +158,14 @@ static int mysql_drv_disconnect(db_conn_t *);
 static int mysql_drv_prepare(db_stmt_t *, const char *);
 static int mysql_drv_bind_param(db_stmt_t *, db_bind_t *, unsigned int);
 static int mysql_drv_bind_result(db_stmt_t *, db_bind_t *, unsigned int);
-static int mysql_drv_execute(db_stmt_t *, db_result_set_t *);
+static int mysql_drv_execute(db_stmt_t *, db_result_set_t *, int);
 static int mysql_drv_fetch(db_result_set_t *);
 static int mysql_drv_fetch_row(db_result_set_t *, db_row_t *);
 static unsigned long long mysql_drv_num_rows(db_result_set_t *);
-static int mysql_drv_query(db_conn_t *, const char *, db_result_set_t *);
+static int mysql_drv_query(db_conn_t *, const char *, db_result_set_t *, int);
 static int mysql_drv_free_results(db_result_set_t *);
 static int mysql_drv_close(db_stmt_t *);
-static int mysql_drv_store_results(db_result_set_t *);
+static int mysql_drv_store_results(db_result_set_t *, int);
 static int mysql_drv_done(void);
 
 /* MySQL driver definition */
@@ -632,7 +633,7 @@ int mysql_drv_bind_result(db_stmt_t *stmt, db_bind_t *params, unsigned int len)
 /* Execute prepared statement */
 
 
-int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
+int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs, int thread_id)
 {
   db_conn_t       *con = stmt->connection;
   char            *buf = NULL;
@@ -649,7 +650,8 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
   {
     if (stmt->ptr == NULL)
     {
-      log_text(LOG_DEBUG, "ERROR: exiting mysql_drv_execute(), uninitialized statement");
+      log_text(LOG_ALERT,
+               "ERROR: exiting mysql_drv_execute(), uninitialized statement");
       return SB_DB_ERROR_FAILED;
     }
     rc = mysql_stmt_execute(stmt->ptr);
@@ -661,15 +663,24 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
       if (rc == ER_LOCK_DEADLOCK || rc == ER_LOCK_WAIT_TIMEOUT || 
           rc == ER_CHECKREAD)
         return SB_DB_ERROR_DEADLOCK;
-      log_text(LOG_ALERT, "failed to execute mysql_stmt_execute(): Err%d %s",
+      log_text(LOG_ALERT,
+               "thread#%d: failed to execute mysql_stmt_execute(): Err%d:%s",
+               thread_id,
                mysql_errno(con->ptr),
                mysql_error(con->ptr));
       if (rc == 2013 ||
+          rc == 2006 ||
           rc == ER_SERVER_SHUTDOWN ||
           rc == ER_SHUTDOWN_COMPLETE ||
           rc == ER_SERVER_SHUTDOWN_COMPLETE ||
           rc == ER_NORMAL_SERVER_SHUTDOWN)
+      {
         return SB_DB_ERROR_SHUTDOWN;
+      }
+      log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+               thread_id,
+               mysql_errno(con->ptr),
+               mysql_error(con->ptr));
       return SB_DB_ERROR_FAILED;
     }
     return SB_DB_ERROR_NONE;
@@ -691,7 +702,8 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
       buf = realloc(buf, buflen);
       if (buf == NULL)
       {
-        log_text(LOG_DEBUG, "ERROR: exiting mysql_drv_execute(), memory allocation failure");
+        log_text(LOG_ALERT,
+                 "ERROR: exiting mysql_drv_execute(), memory allocation failure");
         return SB_DB_ERROR_FAILED;
       }
       need_realloc = 0;
@@ -714,7 +726,7 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
   }
   buf[j] = '\0';
   
-  con->db_errno = mysql_drv_query(con, buf, rs);
+  con->db_errno = mysql_drv_query(con, buf, rs, thread_id);
   free(buf);
   if (con->db_errno != SB_DB_ERROR_NONE)
   {
@@ -729,8 +741,10 @@ int mysql_drv_execute(db_stmt_t *stmt, db_result_set_t *rs)
 /* Execute SQL query */
 
 
-int mysql_drv_query(db_conn_t *sb_conn, const char *query,
-                      db_result_set_t *rs)
+int mysql_drv_query(db_conn_t *sb_conn,
+                    const char *query,
+                    db_result_set_t *rs,
+                    int thread_id)
 {
   MYSQL *con = sb_conn->ptr;
   unsigned int rc;
@@ -744,16 +758,28 @@ int mysql_drv_query(db_conn_t *sb_conn, const char *query,
     DEBUG("mysql_errno(%p) = %u", con, rc);
     if (rc == ER_LOCK_DEADLOCK || rc == ER_LOCK_WAIT_TIMEOUT || rc == ER_CHECKREAD)
       return SB_DB_ERROR_DEADLOCK;
-    log_text(LOG_ALERT, "failed to execute MySQL query: `%s`:", query);
-    log_text(LOG_ALERT, "Error %d %s", mysql_errno(con), mysql_error(con));
+    log_text(LOG_ALERT,
+             "thread#%d: failed to execute MySQL query: `%s`:"
+             "Error %d %s",
+             thread_id,
+             query,
+             mysql_errno(con),
+             mysql_error(con));
     if (rc == 2013 ||
+        rc == 2006 ||
         rc == ER_SERVER_SHUTDOWN ||
         rc == ER_SHUTDOWN_COMPLETE ||
         rc == ER_SERVER_SHUTDOWN_COMPLETE ||
         rc == ER_NORMAL_SERVER_SHUTDOWN)
+    {
       return SB_DB_ERROR_SHUTDOWN;
-    return SB_DB_ERROR_FAILED; 
-  }  
+    }
+    log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+             thread_id,
+             mysql_errno(con),
+             mysql_error(con));
+    return SB_DB_ERROR_FAILED;
+  }
 
   return SB_DB_ERROR_NONE;
 }
@@ -796,7 +822,7 @@ unsigned long long mysql_drv_num_rows(db_result_set_t *rs)
 /* Store results from the last query */
 
 
-int mysql_drv_store_results(db_result_set_t *rs)
+int mysql_drv_store_results(db_result_set_t *rs, int thread_id)
 {
   MYSQL        *con = rs->connection->ptr;
   MYSQL_RES    *res;
@@ -824,7 +850,23 @@ int mysql_drv_store_results(db_result_set_t *rs)
         return SB_DB_ERROR_DEADLOCK;
       }
 
-      log_text(LOG_ALERT, "MySQL error: %s\n", mysql_error(con));
+      log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s",
+               thread_id,
+               mysql_errno(con),
+               mysql_error(con));
+      if (rc == 2013 ||
+          rc == 2006 ||
+          rc == ER_SERVER_SHUTDOWN ||
+          rc == ER_SHUTDOWN_COMPLETE ||
+          rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+          rc == ER_NORMAL_SERVER_SHUTDOWN)
+      {
+        return SB_DB_ERROR_SHUTDOWN;
+      }
+      log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+               thread_id,
+               mysql_errno(con),
+               mysql_error(con));
       return SB_DB_ERROR_FAILED;
     }
     rs->nrows = mysql_stmt_num_rows(rs->statement->ptr);
@@ -839,7 +881,11 @@ int mysql_drv_store_results(db_result_set_t *rs)
 #endif
   
   if (con == NULL)
+  {
+    log_text(LOG_ALERT, "thread#%d: failed, no connection",
+             thread_id);
     return SB_DB_ERROR_FAILED;
+  }
   
   /* using store results for speed will not work for large sets */
   res = mysql_store_result(con);
@@ -855,7 +901,23 @@ int mysql_drv_store_results(db_result_set_t *rs)
                  mysql_error(con));
         return SB_DB_ERROR_DEADLOCK;
       }
-    log_text(LOG_ALERT, "MySQL error: %s", mysql_error(con));
+    log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s",
+             thread_id,
+             mysql_errno(con),
+             mysql_error(con));
+    if (rc == 2013 ||
+        rc == 2006 ||
+        rc == ER_SERVER_SHUTDOWN ||
+        rc == ER_SHUTDOWN_COMPLETE ||
+        rc == ER_SERVER_SHUTDOWN_COMPLETE ||
+        rc == ER_NORMAL_SERVER_SHUTDOWN)
+    {
+      return SB_DB_ERROR_SHUTDOWN;
+    }
+    log_text(LOG_ALERT, "thread#%d: MySQL error: Err%d:%s failed",
+             thread_id,
+             mysql_errno(con),
+             mysql_error(con));
     return SB_DB_ERROR_FAILED; 
   }
   rs->ptr = (void *)res;

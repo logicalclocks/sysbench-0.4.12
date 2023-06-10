@@ -758,6 +758,7 @@ infodir
 docdir
 oldincludedir
 includedir
+runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -791,7 +792,6 @@ with_aix_soname
 with_gnu_ld
 with_sysroot
 enable_libtool_lock
-with_lib_prefix
 with_extra_ldflags
 with_mysql
 enable_largefile
@@ -855,6 +855,7 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
+runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1107,6 +1108,15 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
+  -runstatedir | --runstatedir | --runstatedi | --runstated \
+  | --runstate | --runstat | --runsta | --runst | --runs \
+  | --run | --ru | --r)
+    ac_prev=runstatedir ;;
+  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
+  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
+  | --run=* | --ru=* | --r=*)
+    runstatedir=$ac_optarg ;;
+
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1244,7 +1254,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir
+		libdir localedir mandir runstatedir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1397,6 +1407,7 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
+  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1473,8 +1484,6 @@ Optional Packages:
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
-  --with-lib-prefix[=DIR] search for libraries in DIR/include and DIR/lib
-  --without-lib-prefix    don't search for libraries in includedir and libdir
   --with-extra-ldflags    additional linker flags, e.g. -all-static
   --with-mysql            compile with MySQL support (default is enabled)
   --with-mysql-includes   path to MySQL header files
@@ -12528,545 +12537,7 @@ $as_echo "\"$CC_VERSION\"" >&6; }
 
 # Checks for user arguments
 
-
-
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking 32-bit host C ABI" >&5
-$as_echo_n "checking 32-bit host C ABI... " >&6; }
-if ${gl_cv_host_cpu_c_abi_32bit+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  if test -n "$gl_cv_host_cpu_c_abi"; then
-       case "$gl_cv_host_cpu_c_abi" in
-         i386 | x86_64-x32 | arm | armhf | arm64-ilp32 | hppa | ia64-ilp32 | mips | mipsn32 | powerpc | riscv*-ilp32* | s390 | sparc)
-           gl_cv_host_cpu_c_abi_32bit=yes ;;
-         x86_64 | alpha | arm64 | hppa64 | ia64 | mips64 | powerpc64 | powerpc64-elfv2 | riscv*-lp64* | s390x | sparc64 )
-           gl_cv_host_cpu_c_abi_32bit=no ;;
-         *)
-           gl_cv_host_cpu_c_abi_32bit=unknown ;;
-       esac
-     else
-       case "$host_cpu" in
-
-         # CPUs that only support a 32-bit ABI.
-         arc \
-         | bfin \
-         | cris* \
-         | csky \
-         | epiphany \
-         | ft32 \
-         | h8300 \
-         | m68k \
-         | microblaze | microblazeel \
-         | nds32 | nds32le | nds32be \
-         | nios2 | nios2eb | nios2el \
-         | or1k* \
-         | or32 \
-         | sh | sh1234 | sh1234elb \
-         | tic6x \
-         | xtensa* )
-           gl_cv_host_cpu_c_abi_32bit=yes
-           ;;
-
-         # CPUs that only support a 64-bit ABI.
-         alpha | alphaev[4-8] | alphaev56 | alphapca5[67] | alphaev6[78] \
-         | mmix )
-           gl_cv_host_cpu_c_abi_32bit=no
-           ;;
-
-         i[34567]86 )
-           gl_cv_host_cpu_c_abi_32bit=yes
-           ;;
-
-         x86_64 )
-           # On x86_64 systems, the C compiler may be generating code in one of
-           # these ABIs:
-           # - 64-bit instruction set, 64-bit pointers, 64-bit 'long': x86_64.
-           # - 64-bit instruction set, 64-bit pointers, 32-bit 'long': x86_64
-           #   with native Windows (mingw, MSVC).
-           # - 64-bit instruction set, 32-bit pointers, 32-bit 'long': x86_64-x32.
-           # - 32-bit instruction set, 32-bit pointers, 32-bit 'long': i386.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if (defined __x86_64__ || defined __amd64__ \
-                       || defined _M_X64 || defined _M_AMD64) \
-                      && !(defined __ILP32__ || defined _ILP32)
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         arm* | aarch64 )
-           # Assume arm with EABI.
-           # On arm64 systems, the C compiler may be generating code in one of
-           # these ABIs:
-           # - aarch64 instruction set, 64-bit pointers, 64-bit 'long': arm64.
-           # - aarch64 instruction set, 32-bit pointers, 32-bit 'long': arm64-ilp32.
-           # - 32-bit instruction set, 32-bit pointers, 32-bit 'long': arm or armhf.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined __aarch64__ && !(defined __ILP32__ || defined _ILP32)
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         hppa1.0 | hppa1.1 | hppa2.0* | hppa64 )
-           # On hppa, the C compiler may be generating 32-bit code or 64-bit
-           # code. In the latter case, it defines _LP64 and __LP64__.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#ifdef __LP64__
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         ia64* )
-           # On ia64 on HP-UX, the C compiler may be generating 64-bit code or
-           # 32-bit code. In the latter case, it defines _ILP32.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#ifdef _ILP32
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=yes
-else
-  gl_cv_host_cpu_c_abi_32bit=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         mips* )
-           # We should also check for (_MIPS_SZPTR == 64), but gcc keeps this
-           # at 32.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined _MIPS_SZLONG && (_MIPS_SZLONG == 64)
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         powerpc* )
-           # Different ABIs are in use on AIX vs. Mac OS X vs. Linux,*BSD.
-           # No need to distinguish them here; the caller may distinguish
-           # them based on the OS.
-           # On powerpc64 systems, the C compiler may still be generating
-           # 32-bit code. And on powerpc-ibm-aix systems, the C compiler may
-           # be generating 64-bit code.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined __powerpc64__ || defined _ARCH_PPC64
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         rs6000 )
-           gl_cv_host_cpu_c_abi_32bit=yes
-           ;;
-
-         riscv32 | riscv64 )
-           # There are 6 ABIs: ilp32, ilp32f, ilp32d, lp64, lp64f, lp64d.
-           # Size of 'long' and 'void *':
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined __LP64__
-                    int ok;
-                  #else
-                    error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         s390* )
-           # On s390x, the C compiler may be generating 64-bit (= s390x) code
-           # or 31-bit (= s390) code.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined __LP64__ || defined __s390x__
-                    int ok;
-                  #else
-                    error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         sparc | sparc64 )
-           # UltraSPARCs running Linux have `uname -m` = "sparc64", but the
-           # C compiler still generates 32-bit code.
-           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#if defined __sparcv9 || defined __arch64__
-                   int ok;
-                  #else
-                   error fail
-                  #endif
-
-_ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
-  gl_cv_host_cpu_c_abi_32bit=no
-else
-  gl_cv_host_cpu_c_abi_32bit=yes
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-           ;;
-
-         *)
-           gl_cv_host_cpu_c_abi_32bit=unknown
-           ;;
-       esac
-     fi
-
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $gl_cv_host_cpu_c_abi_32bit" >&5
-$as_echo "$gl_cv_host_cpu_c_abi_32bit" >&6; }
-
-  HOST_CPU_C_ABI_32BIT="$gl_cv_host_cpu_c_abi_32bit"
-
-
-
-
-
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ELF binary format" >&5
-$as_echo_n "checking for ELF binary format... " >&6; }
-if ${gl_cv_elf+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-#ifdef __ELF__
-        Extensible Linking Format
-        #endif
-
-_ACEOF
-if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
-  $EGREP "Extensible Linking Format" >/dev/null 2>&1; then :
-  gl_cv_elf=yes
-else
-  gl_cv_elf=no
-fi
-rm -f conftest*
-
-
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $gl_cv_elf" >&5
-$as_echo "$gl_cv_elf" >&6; }
-  if test $gl_cv_elf; then
-    # Extract the ELF class of a file (5th byte) in decimal.
-    # Cf. https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#File_header
-    if od -A x < /dev/null >/dev/null 2>/dev/null; then
-      # Use POSIX od.
-      func_elfclass ()
-      {
-        od -A n -t d1 -j 4 -N 1
-      }
-    else
-      # Use BSD hexdump.
-      func_elfclass ()
-      {
-        dd bs=1 count=1 skip=4 2>/dev/null | hexdump -e '1/1 "%3d "'
-        echo
-      }
-    fi
-    case $HOST_CPU_C_ABI_32BIT in
-      yes)
-        # 32-bit ABI.
-        acl_is_expected_elfclass ()
-        {
-          test "`func_elfclass | sed -e 's/[ 	]//g'`" = 1
-        }
-        ;;
-      no)
-        # 64-bit ABI.
-        acl_is_expected_elfclass ()
-        {
-          test "`func_elfclass | sed -e 's/[ 	]//g'`" = 2
-        }
-        ;;
-      *)
-        # Unknown.
-        acl_is_expected_elfclass ()
-        {
-          :
-        }
-        ;;
-    esac
-  else
-    acl_is_expected_elfclass ()
-    {
-      :
-    }
-  fi
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the common suffixes of directories in the library search path" >&5
-$as_echo_n "checking for the common suffixes of directories in the library search path... " >&6; }
-if ${acl_cv_libdirstems+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-            acl_libdirstem=lib
-     acl_libdirstem2=
-     acl_libdirstem3=
-     case "$host_os" in
-       solaris*)
-                                                      if test $HOST_CPU_C_ABI_32BIT = no; then
-           acl_libdirstem2=lib/64
-           case "$host_cpu" in
-             sparc*)        acl_libdirstem3=lib/sparcv9 ;;
-             i*86 | x86_64) acl_libdirstem3=lib/amd64 ;;
-           esac
-         fi
-         ;;
-       *)
-                                                                                 searchpath=`(LC_ALL=C $CC $CPPFLAGS $CFLAGS -print-search-dirs) 2>/dev/null \
-                     | sed -n -e 's,^libraries: ,,p' | sed -e 's,^=,,'`
-         if test $HOST_CPU_C_ABI_32BIT != no; then
-           # 32-bit or unknown ABI.
-           if test -d /usr/lib32; then
-             acl_libdirstem2=lib32
-           fi
-         fi
-         if test $HOST_CPU_C_ABI_32BIT != yes; then
-           # 64-bit or unknown ABI.
-           if test -d /usr/lib64; then
-             acl_libdirstem3=lib64
-           fi
-         fi
-         if test -n "$searchpath"; then
-           acl_save_IFS="${IFS= 	}"; IFS=":"
-           for searchdir in $searchpath; do
-             if test -d "$searchdir"; then
-               case "$searchdir" in
-                 */lib32/ | */lib32 ) acl_libdirstem2=lib32 ;;
-                 */lib64/ | */lib64 ) acl_libdirstem3=lib64 ;;
-                 */../ | */.. )
-                   # Better ignore directories of this form. They are misleading.
-                   ;;
-                 *) searchdir=`cd "$searchdir" && pwd`
-                    case "$searchdir" in
-                      */lib32 ) acl_libdirstem2=lib32 ;;
-                      */lib64 ) acl_libdirstem3=lib64 ;;
-                    esac ;;
-               esac
-             fi
-           done
-           IFS="$acl_save_IFS"
-           if test $HOST_CPU_C_ABI_32BIT = yes; then
-             # 32-bit ABI.
-             acl_libdirstem3=
-           fi
-           if test $HOST_CPU_C_ABI_32BIT = no; then
-             # 64-bit ABI.
-             acl_libdirstem2=
-           fi
-         fi
-         ;;
-     esac
-     test -n "$acl_libdirstem2" || acl_libdirstem2="$acl_libdirstem"
-     test -n "$acl_libdirstem3" || acl_libdirstem3="$acl_libdirstem"
-     acl_cv_libdirstems="$acl_libdirstem,$acl_libdirstem2,$acl_libdirstem3"
-
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acl_cv_libdirstems" >&5
-$as_echo "$acl_cv_libdirstems" >&6; }
-      acl_libdirstem=`echo "$acl_cv_libdirstems" | sed -e 's/,.*//'`
-  acl_libdirstem2=`echo "$acl_cv_libdirstems" | sed -e 's/^[^,]*,//' -e 's/,.*//'`
-  acl_libdirstem3=`echo "$acl_cv_libdirstems" | sed -e 's/^[^,]*,[^,]*,//' -e 's/,.*//'`
-
-
-      if test "X$prefix" = "XNONE"; then
-    acl_final_prefix="$ac_default_prefix"
-  else
-    acl_final_prefix="$prefix"
-  fi
-  if test "X$exec_prefix" = "XNONE"; then
-    acl_final_exec_prefix='${prefix}'
-  else
-    acl_final_exec_prefix="$exec_prefix"
-  fi
-  acl_save_prefix="$prefix"
-  prefix="$acl_final_prefix"
-  eval acl_final_exec_prefix=\"$acl_final_exec_prefix\"
-  prefix="$acl_save_prefix"
-
-
-
-
-
-
-
-    use_additional=yes
-
-  acl_save_prefix="$prefix"
-  prefix="$acl_final_prefix"
-  acl_save_exec_prefix="$exec_prefix"
-  exec_prefix="$acl_final_exec_prefix"
-
-    eval additional_includedir=\"$includedir\"
-    eval additional_libdir=\"$libdir\"
-
-  exec_prefix="$acl_save_exec_prefix"
-  prefix="$acl_save_prefix"
-
-
-# Check whether --with-lib-prefix was given.
-if test "${with_lib_prefix+set}" = set; then :
-  withval=$with_lib_prefix;
-    if test "X$withval" = "Xno"; then
-      use_additional=no
-    else
-      if test "X$withval" = "X"; then
-
-  acl_save_prefix="$prefix"
-  prefix="$acl_final_prefix"
-  acl_save_exec_prefix="$exec_prefix"
-  exec_prefix="$acl_final_exec_prefix"
-
-          eval additional_includedir=\"$includedir\"
-          eval additional_libdir=\"$libdir\"
-
-  exec_prefix="$acl_save_exec_prefix"
-  prefix="$acl_save_prefix"
-
-      else
-        additional_includedir="$withval/include"
-        additional_libdir="$withval/$acl_libdirstem"
-      fi
-    fi
-
-fi
-
-  if test $use_additional = yes; then
-                            if test "X$additional_includedir" != "X/usr/include"; then
-      haveit=
-      for x in $CPPFLAGS; do
-
-  acl_save_prefix="$prefix"
-  prefix="$acl_final_prefix"
-  acl_save_exec_prefix="$exec_prefix"
-  exec_prefix="$acl_final_exec_prefix"
-  eval x=\"$x\"
-  exec_prefix="$acl_save_exec_prefix"
-  prefix="$acl_save_prefix"
-
-        if test "X$x" = "X-I$additional_includedir"; then
-          haveit=yes
-          break
-        fi
-      done
-      if test -z "$haveit"; then
-        if test "X$additional_includedir" = "X/usr/local/include"; then
-          if test -n "$GCC"; then
-            case $host_os in
-              linux* | gnu* | k*bsd*-gnu) haveit=yes;;
-            esac
-          fi
-        fi
-        if test -z "$haveit"; then
-          if test -d "$additional_includedir"; then
-                        CPPFLAGS="${CPPFLAGS}${CPPFLAGS:+ }-I$additional_includedir"
-          fi
-        fi
-      fi
-    fi
-                            if test "X$additional_libdir" != "X/usr/$acl_libdirstem"; then
-      haveit=
-      for x in $LDFLAGS; do
-
-  acl_save_prefix="$prefix"
-  prefix="$acl_final_prefix"
-  acl_save_exec_prefix="$exec_prefix"
-  exec_prefix="$acl_final_exec_prefix"
-  eval x=\"$x\"
-  exec_prefix="$acl_save_exec_prefix"
-  prefix="$acl_save_prefix"
-
-        if test "X$x" = "X-L$additional_libdir"; then
-          haveit=yes
-          break
-        fi
-      done
-      if test -z "$haveit"; then
-        if test "X$additional_libdir" = "X/usr/local/$acl_libdirstem"; then
-          if test -n "$GCC"; then
-            case $host_os in
-              linux*) haveit=yes;;
-            esac
-          fi
-        fi
-        if test -z "$haveit"; then
-          if test -d "$additional_libdir"; then
-                        LDFLAGS="${LDFLAGS}${LDFLAGS:+ }-L$additional_libdir"
-          fi
-        fi
-      fi
-    fi
-  fi
-
+#AC_LIB_PREFIX()
 # Additional linker flags
 
 # Check whether --with-extra-ldflags was given.
@@ -14333,7 +13804,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -14379,7 +13850,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -14403,7 +13874,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -14448,7 +13919,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -14472,7 +13943,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
+#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -14791,6 +14262,8 @@ main ()
     if (*(data + i) != *(data3 + i))
       return 14;
   close (fd);
+  free (data);
+  free (data3);
   return 0;
 }
 _ACEOF
