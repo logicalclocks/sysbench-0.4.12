@@ -63,6 +63,8 @@ static sb_arg_t oltp_args[] =
   {"oltp-use-in-statement", "Use IN-statement with 10 PK lookups per query",
     SB_ARG_TYPE_INT, "0"},
   {"oltp-use-filter", "Use filters in range queries", SB_ARG_TYPE_FLAG, "off"},
+  {"oltp-use-left-outer-join-star", "Use LEFT OUTER JOIN with star-schema instead of SELECT PK", SB_ARG_TYPE_FLAG, "off"},
+  {"oltp-use-left-outer-join-fk", "Use LEFT OUTER JOIN with FKs instead of SELECT PK", SB_ARG_TYPE_FLAG, "off"},
   {"oltp-simple-ranges", "number of simple ranges", SB_ARG_TYPE_INT, "1"},
   {"oltp-sum-ranges", "number of sum ranges", SB_ARG_TYPE_INT, "1"},
   {"oltp-order-ranges", "number of ordered ranges", SB_ARG_TYPE_INT, "1"},
@@ -147,6 +149,9 @@ typedef struct
   unsigned int     avoid_deadlocks;
   unsigned int     read_only;
   unsigned int     use_filter;
+  unsigned int     use_left_outer_join_star;
+  unsigned int     use_left_outer_join_fk;
+  unsigned int     define_filter;
   unsigned int     skip_trx;
   unsigned int     auto_inc;
   unsigned int     range_size;
@@ -378,6 +383,144 @@ static char* get_table_name(unsigned int table_id, char *buf)
   return buf;
 }
 
+static unsigned int
+create_column_name(unsigned int table_id,
+                   const char *col_name,
+                   char *buf)
+{
+  char loc_buf[128];
+  get_table_name(table_id, loc_buf);
+  strcpy(buf, loc_buf);
+  unsigned int buflen = strlen(buf);
+  buf[buflen] = '.';
+  buflen++;
+  strcpy(&buf[buflen], col_name);
+  buflen = strlen(buf);
+  return buflen;
+}
+
+static void
+add_query_str(char *buf,
+              const char *add_str,
+              unsigned *buflen)
+{
+  unsigned int add_str_len = strlen(add_str);
+  strcpy(&buf[buflen], add_str);
+  *buflen += add_str_len;
+}
+
+char*
+create_left_outer_join_star(unsigned num_tables, char *buf)
+{
+  char col_buf[128];
+  unsigned int buflen = 0;
+
+  add_query_str(buf, "SELECT ", &buflen);
+
+  create_column_name(0, "id", col_buf);
+  add_query_str(buf, col_buf, &buflen);
+
+  add_query_str(buf, ", ", &buflen);
+
+  for (unsigned int i = 0; i < num_tables; i++)
+  {
+    create_column_name(i, "pad", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+
+    add_query_str(buf, ", ", &buflen);
+
+    create_column_name(i, "c", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+  }
+  add_query_str(buf, " FROM ", &buflen);
+
+  get_table_name(0, col_buf);
+  add_query_str(buf, col_buf, &buflen);
+  
+  for (unsigned int j = 1; j < num_tables; j++)
+  {
+    add_query_str(buf, " LEFT OUTER JOIN ", &buflen);
+
+    get_table_name(j, col_buf);
+    add_query_str(buf, col_buf, &buflen);
+    
+    add_query_str(buf, " ON ", &buflen);
+
+    create_column_name(0, "id", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+
+    add_query_str(buf, " = ", &buflen);
+
+    create_column_name(j, "id", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+  }
+  add_query_str(buf, " WHERE ", &buflen);
+
+  create_column_name(0, "id", col_buf);
+  add_query_str(buf, col_buf, &buflen);
+
+  add_query_str(buf, " = ", &buflen);
+
+  add_query_str(buf, "?", &buflen);
+  return buf;
+}
+
+char*
+create_left_outer_join_fk(unsigned num_tables, char *buf)
+{
+  char col_buf[128];
+  unsigned int buflen = 0;
+
+  add_query_str(buf, "SELECT ", &buflen);
+
+  create_column_name(0, "id", col_buf);
+  add_query_str(buf, col_buf, &buflen);
+
+  add_query_str(buf, ", ", &buflen);
+
+  for (unsigned int i = 0; i < num_tables; i++)
+  {
+    create_column_name(i, "pad", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+
+    add_query_str(buf, ", ", &buflen);
+
+    create_column_name(i, "c", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+  }
+  add_query_str(buf, " FROM ", &buflen);
+
+  get_table_name(0, col_buf);
+  add_query_str(buf, col_buf, &buflen);
+  
+  for (unsigned int j = 1; j < num_tables; j++)
+  {
+    add_query_str(buf, " LEFT OUTER JOIN ", &buflen);
+
+    get_table_name(j, col_buf);
+    add_query_str(buf, col_buf, &buflen);
+    
+    add_query_str(buf, " ON ", &buflen);
+
+    create_column_name(j - 1, "filter_col", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+
+    add_query_str(buf, " = ", &buflen);
+
+    create_column_name(j, "id", col_buf);
+    add_query_str(buf, col_buf, &buflen);
+  }
+  add_query_str(buf, " WHERE ", &buflen);
+
+  create_column_name(0, "id", col_buf);
+  add_query_str(buf, col_buf, &buflen);
+
+  add_query_str(buf, " = ", &buflen);
+
+  add_query_str(buf, "?", &buflen);
+  return buf;
+}
+
 int register_test_oltp(sb_list_t *tests)
 {
   /* Register database API */
@@ -600,7 +743,7 @@ void *oltp_cmd_prepare_one_table(void *arg)
       snprintf(insert_str, sizeof(insert_str),
                "(0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')");
     }
-    else if (args.use_filter)
+    else if (args.define_filter)
     {
       snprintf(insert_str, sizeof(insert_str),
         "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt,%d')",
@@ -652,7 +795,7 @@ void *oltp_cmd_prepare_one_table(void *arg)
            driver_caps.unsigned_int ? "UNSIGNED" : "",
            (args.auto_inc && driver_caps.auto_increment) ? "AUTO_INCREMENT" : "",
            driver_caps.unsigned_int ? "UNSIGNED" : "",
-           (args.use_filter && !args.auto_inc) ? ",filter_col integer DEFAULT '0' NOT NULL " : "",
+           (args.define_filter && !args.auto_inc) ? ",filter_col integer DEFAULT '0' NOT NULL " : "",
            args.secondary ? ",KEY xid (id) USING BTREE" : "",
            (table_options_str != NULL) ? table_options_str : "",
            args.use_ndb_disk_data ? "TABLESPACE ts1 STORAGE DISK" : "",
@@ -731,7 +874,7 @@ void *oltp_cmd_prepare_one_table(void *arg)
         n = snprintf(query, query_len, "INSERT INTO %s(k, c, pad) VALUES ",
                      table_name);
       }
-      else if (args.use_filter)
+      else if (args.define_filter)
       {
         n = snprintf(query,
                      query_len,
@@ -760,7 +903,7 @@ void *oltp_cmd_prepare_one_table(void *arg)
         /* Form the values string when if are not using auto_inc */
         if (!args.auto_inc)
         {
-          if (!args.use_filter)
+          if (!args.define_filter)
           {
             snprintf(insert_str, sizeof(insert_str),
                      "(%d,0,' ','qqqqqqqqqqwwwwwwwwwweeeeeeeeeerrrrrrrrrrtttttttttt')",
@@ -2116,6 +2259,9 @@ int parse_arguments(void)
 
   args.read_only = sb_get_value_flag("oltp-read-only");
   args.use_filter = sb_get_value_flag("oltp-use-filter");
+  args.use_left_outer_join_star = sb_get_value_flag("oltp-use-left-outer-join-star");
+  args.use_left_outer_join_fk = sb_get_value_flag("oltp-use-left-outer-join-fk");
+
   args.avoid_deadlocks = sb_get_value_flag("oltp-avoid-deadlocks");
   args.skip_trx = sb_get_value_flag("oltp-skip-trx");
   args.auto_inc = sb_get_value_flag("oltp-auto-inc");
@@ -2224,6 +2370,14 @@ int parse_arguments(void)
 
   args.use_range = sb_get_value_flag("oltp-use-range");
   args.use_ndb_disk_data = sb_get_value_flag("oltp-use-ndb-disk-data");
+
+  if (args.num_tables < 2)
+  {
+    args.use_left_outer_join_star = false;
+    args.use_left_outer_join_fk = false;
+  }
+  if (args.use_filter || args.use_left_outer_join_star || args.use_left_outer_join_fk)
+    args.define_filter = true;
   return 0;
 }
 
@@ -2383,6 +2537,14 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     snprintf(query, MAX_QUERY_LEN, "HANDLER %s READ `%s` = (?)",
              table_name,
              args.secondary ? "xid" : "PRIMARY");
+  }
+  else if (args.use_left_outer_join_star)
+  {
+    query = create_left_outer_join_star(args.num_tables, query);
+  }
+  else if (args.use_left_outer_join_fk)
+  {
+    query = create_left_outer_join_fk(args.num_tables, query);
   }
   else
   {
@@ -2615,7 +2777,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
     return 1;
 
   /* Prepare the insert statement */
-  if (args.use_filter && !args.auto_inc)
+  if (args.define_filter && !args.auto_inc)
   {
     snprintf(query, MAX_QUERY_LEN, "INSERT INTO %s values(?,0,' ',"
              "'aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy',?)",
@@ -2635,7 +2797,7 @@ int prepare_stmt_set_trx(oltp_stmt_set_t *set,
   binds[0].buffer = &bufs->insert.id;
   binds[0].is_null = 0;
   binds[0].data_len = 0;
-  if (args.use_filter && !args.auto_inc)
+  if (args.define_filter && !args.auto_inc)
   {
     len = 2;
     binds[1].type = DB_TYPE_INT;
