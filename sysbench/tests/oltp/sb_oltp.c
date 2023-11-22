@@ -389,8 +389,9 @@ create_column_name(unsigned int table_id,
                    char *buf)
 {
   char loc_buf[128];
-  get_table_name(table_id, loc_buf);
-  strcpy(buf, loc_buf);
+  char *ptr;
+  ptr = get_table_name(table_id, &loc_buf[0]);
+  strcpy(buf, ptr);
   unsigned int buflen = strlen(buf);
   buf[buflen] = '.';
   buflen++;
@@ -414,6 +415,7 @@ create_left_outer_join_star(unsigned num_tables, char *buf)
 {
   char col_buf[128];
   unsigned int buflen = 0;
+  char *ptr;
 
   add_query_str(buf, "SELECT ", &buflen);
 
@@ -424,6 +426,10 @@ create_left_outer_join_star(unsigned num_tables, char *buf)
 
   for (unsigned int i = 0; i < num_tables; i++)
   {
+    if (i != 0)
+    {
+      add_query_str(buf, ", ", &buflen);
+    }
     create_column_name(i, "pad", col_buf);
     add_query_str(buf, col_buf, &buflen);
 
@@ -434,15 +440,15 @@ create_left_outer_join_star(unsigned num_tables, char *buf)
   }
   add_query_str(buf, " FROM ", &buflen);
 
-  get_table_name(0, col_buf);
-  add_query_str(buf, col_buf, &buflen);
+  ptr = get_table_name(0, col_buf);
+  add_query_str(buf, ptr, &buflen);
   
   for (unsigned int j = 1; j < num_tables; j++)
   {
     add_query_str(buf, " LEFT OUTER JOIN ", &buflen);
 
-    get_table_name(j, col_buf);
-    add_query_str(buf, col_buf, &buflen);
+    ptr = get_table_name(j, col_buf);
+    add_query_str(buf, ptr, &buflen);
     
     add_query_str(buf, " ON ", &buflen);
 
@@ -462,6 +468,7 @@ create_left_outer_join_star(unsigned num_tables, char *buf)
   add_query_str(buf, " = ", &buflen);
 
   add_query_str(buf, "?", &buflen);
+  printf("4:buf: %s\n", buf);
   return buf;
 }
 
@@ -469,6 +476,7 @@ static char*
 create_left_outer_join_fk(unsigned num_tables, char *buf)
 {
   char col_buf[128];
+  char *ptr;
   unsigned int buflen = 0;
 
   add_query_str(buf, "SELECT ", &buflen);
@@ -480,6 +488,10 @@ create_left_outer_join_fk(unsigned num_tables, char *buf)
 
   for (unsigned int i = 0; i < num_tables; i++)
   {
+    if (i != 0)
+    {
+      add_query_str(buf, ", ", &buflen);
+    }
     create_column_name(i, "pad", col_buf);
     add_query_str(buf, col_buf, &buflen);
 
@@ -490,15 +502,15 @@ create_left_outer_join_fk(unsigned num_tables, char *buf)
   }
   add_query_str(buf, " FROM ", &buflen);
 
-  get_table_name(0, col_buf);
-  add_query_str(buf, col_buf, &buflen);
+  ptr = get_table_name(0, col_buf);
+  add_query_str(buf, ptr, &buflen);
   
   for (unsigned int j = 1; j < num_tables; j++)
   {
     add_query_str(buf, " LEFT OUTER JOIN ", &buflen);
 
-    get_table_name(j, col_buf);
-    add_query_str(buf, col_buf, &buflen);
+    ptr = get_table_name(j, col_buf);
+    add_query_str(buf, ptr, &buflen);
     
     add_query_str(buf, " ON ", &buflen);
 
@@ -518,6 +530,7 @@ create_left_outer_join_fk(unsigned num_tables, char *buf)
   add_query_str(buf, " = ", &buflen);
 
   add_query_str(buf, "?", &buflen);
+  printf("2:buf: %s\n", buf);
   return buf;
 }
 
