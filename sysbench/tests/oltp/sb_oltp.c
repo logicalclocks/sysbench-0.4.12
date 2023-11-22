@@ -402,14 +402,14 @@ create_column_name(unsigned int table_id,
 static void
 add_query_str(char *buf,
               const char *add_str,
-              unsigned *buflen)
+              unsigned int *buflen)
 {
   unsigned int add_str_len = strlen(add_str);
-  strcpy(&buf[buflen], add_str);
+  strcpy(&buf[*buflen], add_str);
   *buflen += add_str_len;
 }
 
-char*
+static char*
 create_left_outer_join_star(unsigned num_tables, char *buf)
 {
   char col_buf[128];
@@ -465,7 +465,7 @@ create_left_outer_join_star(unsigned num_tables, char *buf)
   return buf;
 }
 
-char*
+static char*
 create_left_outer_join_fk(unsigned num_tables, char *buf)
 {
   char col_buf[128];
@@ -646,7 +646,8 @@ int oltp_cmd_prepare(void)
   }
   return 0;
 }
- 
+
+static
 int handle_query(db_conn_t *con, const char *query, const char *err_message)
 {
   unsigned int retry_count = 0;
@@ -670,6 +671,7 @@ int handle_query(db_conn_t *con, const char *query, const char *err_message)
   return 0;
 }
 
+static
 db_stmt_t* handle_prepare(db_conn_t *con, const char *query)
 {
   db_stmt_t *res;
@@ -2373,11 +2375,11 @@ int parse_arguments(void)
 
   if (args.num_tables < 2)
   {
-    args.use_left_outer_join_star = false;
-    args.use_left_outer_join_fk = false;
+    args.use_left_outer_join_star = 0;
+    args.use_left_outer_join_fk = 0;
   }
   if (args.use_filter || args.use_left_outer_join_star || args.use_left_outer_join_fk)
-    args.define_filter = true;
+    args.define_filter = 1;
   return 0;
 }
 

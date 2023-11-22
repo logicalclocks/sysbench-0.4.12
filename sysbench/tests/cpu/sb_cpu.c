@@ -128,6 +128,7 @@ int cpu_execute_request(sb_request_t *r, int thread_id, int ignored)
   
   (void)r; /* unused */
   (void)ignored;
+  (void)n;
 
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;

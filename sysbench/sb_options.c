@@ -334,7 +334,7 @@ char *sb_print_value_size(char *buf, unsigned int buflen, double value)
 }
 
 
-value_t *new_value()
+value_t *new_value(void)
 {
   value_t *newval;
   
@@ -346,7 +346,7 @@ value_t *new_value()
 }
 
 
-option_t *new_option()
+option_t *new_option(void)
 {
   option_t *newopt;
   

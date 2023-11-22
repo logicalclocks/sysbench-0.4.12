@@ -154,6 +154,7 @@ int mutex_execute_request(sb_request_t *sb_req, int thread_id, int ignored)
   log_msg_oper_t       op_msg;
 
   (void)ignored;
+  (void)c;
 
   /* Prepare log message */
   msg.type = LOG_MSG_TYPE_OPER;

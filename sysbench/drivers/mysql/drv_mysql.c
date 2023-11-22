@@ -549,7 +549,7 @@ int mysql_drv_bind_param(db_stmt_t *stmt, db_bind_t *params, unsigned int len)
       bind[i].buffer = params[i].buffer;
       bind[i].buffer_length = params[i].max_len;
       bind[i].length = params[i].data_len;
-      bind[i].is_null = params[i].is_null;
+      bind[i].is_null = (bool*)params[i].is_null;
     }
 
     rc = mysql_stmt_bind_param(stmt->ptr, bind);
@@ -613,7 +613,7 @@ int mysql_drv_bind_result(db_stmt_t *stmt, db_bind_t *params, unsigned int len)
     bind[i].buffer = params[i].buffer;
     bind[i].buffer_length = params[i].max_len;
     bind[i].length = params[i].data_len;
-    bind[i].is_null = params[i].is_null;
+    bind[i].is_null = (bool*)params[i].is_null;
   }
 
   rc = mysql_stmt_bind_result(stmt->ptr, bind);
